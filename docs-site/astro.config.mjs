@@ -13,7 +13,6 @@ export default defineConfig({
       favicon: "/favicon.svg",
       customCss: ["./src/styles/docs.css"],
       credits: false,
-      tableOfContents: false,
       social: [
         {
           icon: "github",

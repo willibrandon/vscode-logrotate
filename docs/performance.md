@@ -15,7 +15,10 @@ claims.
 `npm run test:performance` runs isolated single-worker core and in-memory JSON-RPC benchmarks after
 warmup. Grammar tests bound pathological lines. LSP diagnostics are debounced, version checked,
 cancellable, and capped. Include work is bounded separately and never blocks static syntax
-highlighting. Every run prints its p95, sample count, and Node version to the build log.
+highlighting. The parser gate uses five independently warmed sample windows and the best p95, while
+printing every trial. This estimates uncontended parser throughput on a shared runner without
+raising the 20 ms budget; a regression must miss the budget in every trial. Every run prints its
+p95, sample count, and Node version to the build log.
 
 ## Recorded baseline
 

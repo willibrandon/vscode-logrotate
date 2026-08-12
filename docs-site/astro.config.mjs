@@ -12,6 +12,10 @@ export default defineConfig({
   site: "https://willibrandon.github.io",
   base: "/vscode-logrotate",
   trailingSlash: "always",
+  image: {
+    layout: "constrained",
+    responsiveStyles: true,
+  },
   integrations: [
     starlight({
       title: "Logrotate",

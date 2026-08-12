@@ -147,6 +147,8 @@ describe("documentation contract", () => {
     expect(config).toContain('site: "https://willibrandon.github.io"');
     expect(config).toContain('base: "/vscode-logrotate"');
     expect(config).toContain('trailingSlash: "always"');
+    expect(config).toContain('layout: "constrained"');
+    expect(config).toContain("responsiveStyles: true");
     expect(config).toContain('"../syntaxes/logrotate.tmLanguage.json"');
     expect(config).toContain("langs: [logrotateLanguage]");
     expect(gettingStarted).toContain("```logrotate");

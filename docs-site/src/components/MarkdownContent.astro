@@ -26,7 +26,9 @@ import Default from "@astrojs/starlight/components/MarkdownContent.astro";
       if (!dialog || !expandedImage || !caption || !closeButton) return;
 
       const open = (image: HTMLImageElement) => {
-        expandedImage.src = image.currentSrc || image.src;
+        expandedImage.src = image.src;
+        expandedImage.srcset = image.srcset;
+        expandedImage.sizes = "96vw";
         expandedImage.alt = image.alt;
         caption.textContent = image.alt;
         dialog.showModal();

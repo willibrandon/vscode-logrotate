@@ -30,6 +30,7 @@ The extension intentionally uses narrow defaults:
 - `logrotate.conf`
 - files directly under a `logrotate.d` directory
 - `*.logrotate` and `*.logrotate.conf`
+- extensionless files whose first line is a complete absolute or tilde-prefixed log-path stanza
 - `logrotate.status`
 - `logrotate/status`
 - state files whose first line is `logrotate state -- version 1` or `logrotate state -- version 2`
@@ -145,10 +146,12 @@ The complete product and technical rationale is in [docs/design.md](docs/design.
 
 ## Status and contributing
 
-The current implementation is being built phase by phase against the acceptance criteria in
-`docs/design.md`. Contributions should preserve browser/desktop parity, lossless script bodies,
-conservative diagnostics, bounded resource use, and generated language-data consistency. A complete
-contributor guide and release process will land before the first public package.
+The implementation is built phase by phase against the acceptance criteria in `docs/design.md`.
+Contributions should preserve browser/desktop parity, lossless script bodies, conservative
+diagnostics, bounded resource use, and generated language-data consistency. See
+[CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the
+[release checklist](docs/release-checklist.md).
 
-Unless a file says otherwise, this project is intended to be distributed under GPL-2.0-only. The
-final publisher identity and Marketplace/Open VSX ownership must be verified before release.
+This project is distributed under the [MIT License](LICENSE) by Brandon Williams and publishes as
+`willibrandon.logrotate`. Protected release rules and private reporting must be verified before the
+first public release.

@@ -1,0 +1,10 @@
+{
+  "name": "logrotate-package-smoke-host",
+  "displayName": "Logrotate Package Smoke Host",
+  "version": "0.0.0",
+  "private": true,
+  "publisher": "vscode-logrotate-tests",
+  "engines": {
+    "vscode": "^1.100.0"
+  }
+}

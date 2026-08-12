@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import * as vscode from "vscode";
 
-const extensionId = "logrotate.logrotate";
+const extensionId = "willibrandon.logrotate";
 
 interface ExtensionManifest {
+  readonly author: { readonly name: string };
   readonly browser: string;
+  readonly license: string;
   readonly main: string;
+  readonly version: string;
 }
 
 suite("Logrotate desktop extension", () => {
@@ -19,6 +22,17 @@ suite("Logrotate desktop extension", () => {
     const manifest = extension.packageJSON as ExtensionManifest;
     assert.equal(manifest.main, "./dist/extension.cjs");
     assert.equal(manifest.browser, "./dist/browser.js");
+    assert.equal(manifest.license, "MIT");
+    assert.equal(manifest.author.name, "Brandon Williams");
+
+    const installedPathPrefix = process.env["EXPECTED_INSTALLED_EXTENSION_PATH_PREFIX"];
+    if (installedPathPrefix !== undefined) {
+      assert.equal(manifest.version, "0.1.0");
+      assert.ok(
+        extension.extensionPath.startsWith(installedPathPrefix),
+        `expected packaged extension under ${installedPathPrefix}, received ${extension.extensionPath}`,
+      );
+    }
   });
 
   test("bridges included files and publishes their diagnostics", async () => {
@@ -36,6 +50,16 @@ suite("Logrotate desktop extension", () => {
       diagnostics.some(({ code }) => code === "LR1001"),
       `expected LR1001 for included.conf, received ${JSON.stringify(diagnostics)}`,
     );
+  });
+
+  test("recognizes an extensionless configuration from its content", async () => {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(folder, "the integration workspace was not opened");
+    const document = await vscode.workspace.openTextDocument(
+      vscode.Uri.joinPath(folder.uri, "deployment-policy"),
+    );
+
+    assert.equal(document.languageId, "logrotate");
   });
 
   test("serves completion and formatting through the extension host", async () => {

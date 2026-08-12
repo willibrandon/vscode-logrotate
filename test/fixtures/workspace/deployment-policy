@@ -1,0 +1,4 @@
+/var/log/content-detected.log {
+  weekly
+  rotate 4
+}

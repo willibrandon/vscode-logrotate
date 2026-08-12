@@ -70,6 +70,20 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
     }
     const content = context.source.slice(line.start, line.contentEnd);
     const trimmed = content.trim();
+    const invalidControl = findInvalidControl(content);
+    if (invalidControl >= 0) {
+      addDiagnostic(context, {
+        code: "LR1015",
+        severity: "error",
+        message: "Configuration text contains a binary control character.",
+        source: "logrotate",
+        start: line.start + invalidControl,
+        end: line.start + invalidControl + 1,
+      });
+      nodes.push(errorNode(context.source, line.start, line.end, "Binary configuration content."));
+      context.index += 1;
+      continue;
+    }
     if (scope === "block" && trimmed.startsWith("}")) {
       break;
     }
@@ -151,6 +165,7 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
   const headerStart = firstLine.start;
   let headerEnd = firstLine.end;
   let openBrace: TextSpan | undefined;
+  let inlineCloseBrace: TextSpan | undefined;
   while (context.index < context.lines.length) {
     const line = context.lines[context.index];
     if (line === undefined) {
@@ -162,7 +177,17 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
     if (brace >= 0) {
       openBrace = { start: line.start + brace, end: line.start + brace + 1 };
       const trailing = content.slice(brace + 1);
-      if (trailing.trim() !== "") {
+      const inlineCloseOffset = trailing.indexOf("}");
+      if (
+        inlineCloseOffset >= 0 &&
+        trailing.slice(0, inlineCloseOffset).trim() === "" &&
+        trailing.slice(inlineCloseOffset + 1).trim() === ""
+      ) {
+        inlineCloseBrace = {
+          start: line.start + brace + 1 + inlineCloseOffset,
+          end: line.start + brace + 2 + inlineCloseOffset,
+        };
+      } else if (trailing.trim() !== "") {
         const trailingStart = line.start + brace + 1 + trailing.search(/\S/u);
         addDiagnostic(context, {
           code: "LR1012",
@@ -232,11 +257,11 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
       end: openBrace.start,
     });
   }
-  const children = parseNodes(context, "block");
+  const children = inlineCloseBrace === undefined ? parseNodes(context, "block") : [];
   const closingLine = context.lines[context.index];
-  let closeBrace: TextSpan | undefined;
-  let end = children.at(-1)?.end ?? headerEnd;
-  if (closingLine !== undefined) {
+  let closeBrace: TextSpan | undefined = inlineCloseBrace;
+  let end = inlineCloseBrace === undefined ? (children.at(-1)?.end ?? headerEnd) : headerEnd;
+  if (inlineCloseBrace === undefined && closingLine !== undefined) {
     const closingContent = context.source.slice(closingLine.start, closingLine.contentEnd);
     const closingOffset = closingContent.indexOf("}");
     if (closingOffset >= 0) {
@@ -416,6 +441,14 @@ function isAsciiLetter(code: number): boolean {
   return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
+function findInvalidControl(content: string): number {
+  for (let index = 0; index < content.length; index += 1) {
+    const code = content.charCodeAt(index);
+    if ((code >= 0 && code <= 8) || (code >= 14 && code <= 31) || code === 127) return index;
+  }
+  return -1;
+}
+
 function parseScript(
   context: ParseContext,
   scope: DirectiveScope,
@@ -549,7 +582,11 @@ function validateArguments(
       }
     }
   }
-  if ((kind === "create" || kind === "createolddir") && !/^[0-7]{3,4}$/u.test(first.value)) {
+  if (
+    (kind === "create" || kind === "createolddir") &&
+    args.length !== 2 &&
+    !/^[0-7]{3,4}$/u.test(first.value)
+  ) {
     argumentError(context, "LR1106", "File modes must be three or four octal digits.", first);
   }
   if (

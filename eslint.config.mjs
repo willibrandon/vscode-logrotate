@@ -8,6 +8,7 @@ export default tseslint.config(
       "node_modules/**",
       ".vscode-test/**",
       ".vscode-test-web/**",
+      ".upstream/**",
       "packages/*/lib/**",
       "packages/language-core/src/generated/**",
       "syntaxes/*.json",
@@ -38,6 +39,7 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
       globals: {
+        console: "readonly",
         process: "readonly",
       },
     },

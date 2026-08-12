@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 
-const extensionId = "logrotate.logrotate";
+const extensionId = "willibrandon.logrotate";
 
 interface ExtensionManifest {
   readonly browser: string;

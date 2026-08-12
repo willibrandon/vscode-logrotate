@@ -3,6 +3,7 @@ dist/
 coverage/
 .vscode-test/
 .vscode-test-web/
+.upstream/
 .eslintcache
 *.tsbuildinfo
 packages/*/lib/

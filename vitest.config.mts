@@ -14,6 +14,26 @@ const config: ViteUserConfig = defineConfig({
     testTimeout: 10_000,
     hookTimeout: 10_000,
     restoreMocks: true,
+    coverage: {
+      provider: "v8",
+      include: [
+        "packages/language-core/src/**/*.ts",
+        "packages/language-server/src/protocol.ts",
+        "packages/language-server/src/server.ts",
+        "packages/vscode-client/src/external-validation-policy.ts",
+        "packages/vscode-client/src/external-validator.ts",
+      ],
+      exclude: ["packages/language-core/src/generated/**"],
+      reporter: ["text", "json-summary", "lcov"],
+      reportsDirectory: "coverage",
+      thresholds: {
+        perFile: true,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+        statements: 80,
+      },
+    },
   },
 });
 

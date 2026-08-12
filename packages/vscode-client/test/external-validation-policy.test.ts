@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  explainUnavailability,
   externalValidationUnavailable,
   type ValidationContext,
 } from "../src/external-validation-policy.js";
@@ -25,5 +26,7 @@ describe("external validation policy", () => {
     ["wrong-language", { languageId: "plaintext" }],
   ] as const)("reports %s deterministically", (expected, replacement) => {
     expect(externalValidationUnavailable({ ...available, ...replacement })).toBe(expected);
+    expect(explainUnavailability(expected)).toBeTypeOf("string");
+    expect(explainUnavailability(expected).length).toBeGreaterThan(20);
   });
 });

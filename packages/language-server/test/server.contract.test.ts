@@ -37,6 +37,7 @@ describe("shared language server contract", () => {
       documentLinkProvider: { resolveProvider: false },
       definitionProvider: true,
       referencesProvider: true,
+      documentHighlightProvider: true,
       documentFormattingProvider: true,
       documentRangeFormattingProvider: true,
       semanticTokensProvider: { full: true },

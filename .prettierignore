@@ -1,5 +1,6 @@
 dist
 node_modules
+.upstream
 package-lock.json
 syntaxes/*.json
 snippets/*.json

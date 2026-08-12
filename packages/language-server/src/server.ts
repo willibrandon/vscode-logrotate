@@ -155,7 +155,15 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
   documents.onDidChangeContent(({ document }): void => scheduleDiagnostics(document));
   documents.onDidClose(({ document }): void => {
     cancelPending(document.uri);
-    void connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+    const job = (async (): Promise<void> => {
+      await connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+      await clearRemovedIncludes(connection, document.uri, new Set(), loadedIncludes);
+      loadedIncludes.delete(document.uri);
+    })().catch((): void => undefined);
+    diagnosticJobs.add(job);
+    void job.finally((): void => {
+      diagnosticJobs.delete(job);
+    });
   });
 
   connection.onShutdown(async (): Promise<void> => {

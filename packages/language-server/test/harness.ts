@@ -13,6 +13,7 @@ import { readDirectoryRequest, readFileRequest, statRequest } from "../src/proto
 interface TestFile {
   readonly text?: string;
   readonly entries?: readonly string[];
+  readonly readDelayMilliseconds?: number;
 }
 
 interface DiagnosticWaiter {
@@ -26,6 +27,7 @@ export interface ServerHarness {
   readonly initializeResult: InitializeResult;
   open(uri: string, languageId: string, text: string, version?: number): Promise<void>;
   change(uri: string, text: string, version: number): Promise<void>;
+  configure(settings: unknown): Promise<void>;
   close(uri: string): Promise<void>;
   waitForDiagnostics(
     uri: string,
@@ -68,9 +70,13 @@ export async function createServerHarness(
     if (text === undefined) throw new Error(`Missing test file: ${uri}`);
     return text;
   });
-  client.onRequest(readDirectoryRequest, ({ uri }): readonly string[] => {
+  client.onRequest(readDirectoryRequest, async ({ uri }): Promise<readonly string[]> => {
     const entries = files[uri]?.entries;
     if (entries === undefined) throw new Error(`Missing test directory: ${uri}`);
+    const delay = files[uri]?.readDelayMilliseconds;
+    if (delay !== undefined) {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, delay));
+    }
     return entries;
   });
   client.onRequest(statRequest, ({ uri }) => {
@@ -112,6 +118,9 @@ export async function createServerHarness(
         textDocument: { uri, version },
         contentChanges: [{ text }],
       });
+    },
+    async configure(settings): Promise<void> {
+      await client.sendNotification("workspace/didChangeConfiguration", { settings });
     },
     async close(uri): Promise<void> {
       await client.sendNotification("textDocument/didClose", { textDocument: { uri } });

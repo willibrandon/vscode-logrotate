@@ -178,4 +178,144 @@ describe("include graph", () => {
     expect(deep.files.has("file:///depth-17")).toBe(false);
     expect(deep.diagnostics.at(-1)?.code).toBe("LR3003");
   });
+
+  it("rejects oversized roots and measures every UTF-8 width exactly", async () => {
+    const source = "aé€😀";
+    const fs = fakeFileSystem({ "file:///root": "" });
+    const graph = await buildIncludeGraph("file:///root", source, fs, {
+      maxFileBytes: 9,
+      maxTotalBytes: 9,
+    });
+    expect(graph).toMatchObject({ totalBytes: 10, cancelled: false });
+    expect(graph.files.size).toBe(0);
+    expect(graph.diagnostics).toEqual([
+      expect.objectContaining({ code: "LR3005", start: 0, end: 0 }),
+    ]);
+  });
+
+  it("reports unsupported resources, directory failures, and unreadable directory entries", async () => {
+    const base = fakeFileSystem({
+      "file:///root": "",
+      "file:///broken-directory": [],
+      "file:///parts": ["missing", "nested", ".", "..", "valid"],
+      "file:///parts/nested": [],
+      "file:///parts/valid": "daily\n",
+    });
+    const fs: FileSystemProvider = {
+      ...base,
+      readDirectory(resource): Promise<readonly string[]> {
+        if (resource === "file:///broken-directory") throw new Error("permission denied");
+        return base.readDirectory(resource);
+      },
+      stat(resource): Promise<ResourceStat> {
+        if (resource === "file:///special") return Promise.resolve({ type: "other" });
+        return base.stat(resource);
+      },
+    };
+    const graph = await buildIncludeGraph(
+      "file:///root",
+      [
+        "include file:///special",
+        "include file:///broken-directory",
+        "include file:///parts",
+        "",
+      ].join("\n"),
+      fs,
+    );
+    expect(graph.diagnostics.map(({ code }) => code)).toEqual(["LR3006", "LR3001", "LR3001"]);
+    expect(graph.files.has("file:///parts/nested")).toBe(false);
+    expect(graph.files.has("file:///parts/valid")).toBe(true);
+  });
+
+  it("enforces declared and measured file limits and recovers from read failures", async () => {
+    const base = fakeFileSystem({
+      "file:///root": "",
+      "file:///declared-large": "daily\n",
+      "file:///measured-large": "é".repeat(600),
+      "file:///unreadable": "weekly\n",
+      "file:///valid": "monthly\n",
+    });
+    const fs: FileSystemProvider = {
+      ...base,
+      readFile(resource): Promise<string> {
+        if (resource === "file:///unreadable") throw new Error("permission denied");
+        return base.readFile(resource);
+      },
+      stat(resource): Promise<ResourceStat> {
+        if (resource === "file:///declared-large") {
+          return Promise.resolve({ type: "file", size: 1_000_000 });
+        }
+        if (resource === "file:///measured-large") {
+          return Promise.resolve({ type: "file" });
+        }
+        return base.stat(resource);
+      },
+    };
+    const graph = await buildIncludeGraph(
+      "file:///root",
+      [
+        "include file:///declared-large",
+        "include file:///measured-large",
+        "include file:///unreadable",
+        "include file:///valid",
+        "",
+      ].join("\n"),
+      fs,
+      { maxFileBytes: 1_000, maxTotalBytes: 10_000 },
+    );
+    expect(graph.diagnostics.map(({ code }) => code)).toEqual(["LR3005", "LR3005", "LR3001"]);
+    expect([...graph.files.keys()]).toEqual(["file:///root", "file:///valid"]);
+    expect(graph.totalBytes).toBeGreaterThan(0);
+  });
+
+  it("caches a repeated include while applying it at each inline position", async () => {
+    let reads = 0;
+    const base = fakeFileSystem({
+      "file:///root": "",
+      "file:///shared": "weekly\n",
+    });
+    const fs: FileSystemProvider = {
+      ...base,
+      readFile(resource): Promise<string> {
+        reads += 1;
+        return base.readFile(resource);
+      },
+    };
+    const graph = await buildIncludeGraph(
+      "file:///root",
+      "daily\ninclude file:///shared\nmonthly\ninclude file:///shared\n",
+      fs,
+    );
+    expect(reads).toBe(1);
+    expect([...(graph.files.get("file:///shared")?.inheritedSettings.keys() ?? [])]).toEqual([
+      "daily",
+      "weekly",
+      "monthly",
+    ]);
+    expect([...(graph.files.get("file:///root")?.effectiveSettings.keys() ?? [])]).toEqual([
+      "daily",
+      "weekly",
+      "monthly",
+    ]);
+  });
+
+  it("supports question-mark taboo globs and bounds pathological patterns", async () => {
+    const longPattern = "x".repeat(4097);
+    const longName = "x".repeat(4097);
+    const fs = fakeFileSystem({
+      "file:///root": "",
+      "file:///parts": ["drop-1.conf", "drop-12.conf", longName],
+      "file:///parts/drop-1.conf": "daily\n",
+      "file:///parts/drop-12.conf": "weekly\n",
+      [`file:///parts/${longName}`]: "monthly\n",
+    });
+    const graph = await buildIncludeGraph(
+      "file:///root",
+      `taboopat drop-?.conf,${longPattern}\ninclude file:///parts\n`,
+      fs,
+    );
+    expect(graph.files.has("file:///parts/drop-1.conf")).toBe(false);
+    expect(graph.files.has("file:///parts/drop-12.conf")).toBe(true);
+    expect(graph.files.has(`file:///parts/${longName}`)).toBe(true);
+  });
 });

@@ -1,0 +1,19 @@
+[
+  "CHANGELOG.md",
+  "LICENSE",
+  "README.md",
+  "SECURITY.md",
+  "SUPPORT.md",
+  "THIRD-PARTY-NOTICES.md",
+  "dist/browser.js",
+  "dist/browserServer.js",
+  "dist/extension.cjs",
+  "dist/nodeServer.cjs",
+  "language-configuration.json",
+  "package.json",
+  "package.nls.json",
+  "snippets/logrotate.json",
+  "syntaxes/logrotate-markdown.tmLanguage.json",
+  "syntaxes/logrotate-state.tmLanguage.json",
+  "syntaxes/logrotate.tmLanguage.json"
+]

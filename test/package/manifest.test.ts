@@ -7,7 +7,12 @@ const root = resolve(import.meta.dirname, "../..");
 interface ExtensionManifest {
   readonly activationEvents?: unknown;
   readonly contributes: {
-    readonly languages: unknown;
+    readonly languages: readonly {
+      readonly id: string;
+      readonly filenames?: readonly string[];
+      readonly filenamePatterns?: readonly string[];
+      readonly firstLine?: string;
+    }[];
     readonly configuration: {
       readonly properties: Readonly<Record<string, unknown>>;
     };
@@ -39,6 +44,18 @@ describe("extension manifest", () => {
     expect(JSON.stringify(manifest.contributes.languages)).not.toMatch(
       /\*\.conf|\*\.status|"status"/u,
     );
+
+    const configurationLanguage = manifest.contributes.languages.find(
+      ({ id }) => id === "logrotate",
+    );
+    expect(typeof configurationLanguage?.firstLine).toBe("string");
+    const firstLine = new RegExp(configurationLanguage?.firstLine ?? "", "u");
+    expect(firstLine.test("/var/log/caddy-metrics.log {")).toBe(true);
+    expect(firstLine.test('"/var/log/application output.log" /var/log/second.log {')).toBe(true);
+    expect(firstLine.test("~/logs/application.log { # project policy")).toBe(true);
+    expect(firstLine.test("caddy-metrics-logrotate")).toBe(false);
+    expect(firstLine.test("function deploy() {")).toBe(false);
+    expect(firstLine.test("/usr/bin/env bash")).toBe(false);
   });
 
   it("declares four runtime artifacts and honest workspace capabilities", () => {

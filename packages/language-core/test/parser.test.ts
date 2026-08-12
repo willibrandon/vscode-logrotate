@@ -110,6 +110,24 @@ tabooext + .bak
     );
   });
 
+  it("accepts inline empty blocks and create owner/group forms while rejecting binary text", () => {
+    const source = `create root adm
+/var/log/empty.log { }
+/var/log/mode.log {
+  create 0640 root adm
+}
+    `;
+    const document = parse(source);
+    expect(document.diagnostics).toEqual([]);
+    const [block] = rotationBlocks(document);
+    expect(block?.children).toEqual([]);
+    expect(block?.closeBrace).toBeDefined();
+
+    const binary = parse(`\u007fELF\n${source}`);
+    expect(binary.diagnostics.map(({ code }) => code)).toContain("LR1015");
+    expect(rotationBlocks(binary)).toHaveLength(2);
+  });
+
   it("uses the configured known target and stays conservative for unknown old targets", () => {
     const source = "/var/log/a {\n  dateformat -%Q\n}\n";
     expect(parse(source, { targetVersion: "3.22" }).diagnostics[0]?.message).toContain("3.22");

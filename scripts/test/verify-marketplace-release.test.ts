@@ -75,6 +75,30 @@ describe("Marketplace release verification", () => {
         expected,
       ),
     ).toBe(false);
+    expect(
+      release.isExpectedMarketplaceRelease(
+        marketplaceMetadata("willibrandon", "logrotate", "0.1.0", true, expected.sha256, {
+          extensionFlags: 4,
+        }),
+        expected,
+      ),
+    ).toBe(false);
+    expect(
+      release.isExpectedMarketplaceRelease(
+        marketplaceMetadata("willibrandon", "logrotate", "0.1.0", true, expected.sha256, {
+          extensionFlags: 256,
+        }),
+        expected,
+      ),
+    ).toBe(false);
+    expect(
+      release.isExpectedMarketplaceRelease(
+        marketplaceMetadata("willibrandon", "logrotate", "0.1.0", true, expected.sha256, {
+          versionFlags: 0,
+        }),
+        expected,
+      ),
+    ).toBe(false);
     expect(release.isExpectedMarketplaceRelease(undefined, expected)).toBe(false);
   });
 
@@ -218,12 +242,18 @@ function marketplaceMetadata(
   version: string,
   preRelease: boolean,
   sha256: string,
+  flags: {
+    readonly extensionFlags?: number;
+    readonly versionFlags?: number;
+  } = {},
 ): unknown {
   return {
+    flags: flags.extensionFlags ?? 260,
     publisher: { publisherName: publisher },
     extensionName: name,
     versions: [
       {
+        flags: flags.versionFlags ?? 1,
         version,
         properties: [
           ...(preRelease ? [{ key: "Microsoft.VisualStudio.Code.PreRelease", value: "true" }] : []),

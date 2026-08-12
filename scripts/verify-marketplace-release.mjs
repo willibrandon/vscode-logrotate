@@ -9,12 +9,21 @@ import { runInstalledDesktopSmoke } from "./run-installed-desktop-smoke.mjs";
 
 const execute = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
+const extensionPublicFlag = 256;
+const extensionValidatedFlag = 4;
+const versionValidatedFlag = 1;
 
 export function isExpectedMarketplaceRelease(metadata, expected) {
   if (typeof metadata !== "object" || metadata === null) return false;
   const publisher = metadata.publisher;
   if (typeof publisher !== "object" || publisher === null) return false;
   if (publisher.publisherName !== expected.publisher || metadata.extensionName !== expected.name) {
+    return false;
+  }
+  if (
+    !hasFlag(metadata.flags, extensionPublicFlag) ||
+    !hasFlag(metadata.flags, extensionValidatedFlag)
+  ) {
     return false;
   }
   if (!Array.isArray(metadata.versions)) return false;
@@ -26,6 +35,7 @@ export function isExpectedMarketplaceRelease(metadata, expected) {
     ) {
       return false;
     }
+    if (!hasFlag(candidate.flags, versionValidatedFlag)) return false;
     const properties = Array.isArray(candidate.properties) ? candidate.properties : [];
     const preRelease = properties.some(
       (property) =>
@@ -46,6 +56,10 @@ export function isExpectedMarketplaceRelease(metadata, expected) {
       sha256.toLowerCase() === expected.sha256
     );
   });
+}
+
+function hasFlag(value, flag) {
+  return typeof value === "number" && (value & flag) === flag;
 }
 
 export async function waitForMarketplaceRelease(options) {
@@ -127,7 +141,7 @@ async function verifyMarketplaceRelease() {
     sha256,
   };
   const extensionId = `${expected.publisher}.${expected.name}`;
-  const attempts = positiveInteger(process.env.MARKETPLACE_VERIFY_ATTEMPTS, 20);
+  const attempts = positiveInteger(process.env.MARKETPLACE_VERIFY_ATTEMPTS, 40);
   const interval = positiveInteger(process.env.MARKETPLACE_VERIFY_INTERVAL_MS, 30_000);
   const delay = async () =>
     new Promise((resolvePromise) => globalThis.setTimeout(resolvePromise, interval));

@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.1.3] - 2026-08-12
+## [0.1.4] - 2026-08-12
 
 ### Added
 
@@ -27,6 +27,13 @@ All notable changes to this project are documented here. The format follows
 - Release verification excludes checked-out upstream source trees from repository formatting.
 - The 20 ms parser gate now rejects regressions across five independent sample windows instead of
   failing a release because of one contended shared-runner window.
+- Release metadata is recorded with shell-safe command substitution before attestation and
+  publishing.
+
+## [0.1.3] - 2026-08-12
+
+No artifacts were published. Release automation stopped after publisher verification and artifact
+building, before attestation or publishing.
 
 ## [0.1.2] - 2026-08-12
 
@@ -43,7 +50,8 @@ creation.
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.4
 [0.1.3]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.3
 [0.1.2]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.2
 [0.1.1]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.1

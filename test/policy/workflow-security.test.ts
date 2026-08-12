@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
 
@@ -123,6 +124,20 @@ describe("workflow supply-chain policy", () => {
     expect(gitIgnore.split("\n")).toContain(".logrotate-3.22/");
     expect(prettierIgnore.split("\n")).toContain(".upstream");
     expect(prettierIgnore.split("\n")).toContain(".logrotate-3.22");
+  });
+
+  it("keeps release metadata shell syntax valid", () => {
+    const release = workflow("release.yml");
+    const script =
+      /- name: Record immutable artifact paths\n\s+run: \|\n(?<body>(?: {10}.*\n)+)/u.exec(release)
+        ?.groups?.["body"];
+
+    expect(script).toBeDefined();
+    const shellCheck = spawnSync("bash", ["-n"], {
+      input: script?.replace(/^ {10}/gmu, ""),
+      encoding: "utf8",
+    });
+    expect(shellCheck.status, shellCheck.stderr).toBe(0);
   });
 
   it("publishes one checked and attested VSIX through narrowly scoped credentials", async () => {

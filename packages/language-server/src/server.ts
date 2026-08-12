@@ -88,19 +88,44 @@ const defaultSettings: ServerSettings = {
 
 export function startLanguageServer(connection: Connection, timers: TimerHost): void {
   const documents = new TextDocuments(TextDocument);
-  let settings: ServerSettings = defaultSettings;
-  let detectedTargetVersion: string | undefined;
+  let fallbackSettings: ServerSettings = defaultSettings;
+  let supportsResourceConfiguration = false;
+  const detectedTargetVersions = new Map<string, string>();
   const pendingDiagnostics = new Map<string, unknown>();
   const diagnosticJobs = new Set<Promise<void>>();
+  const resourceSettings = new Map<string, Promise<ServerSettings>>();
   const loadedIncludes = new Map<string, ReadonlySet<string>>();
   const loadedResources = new Map<string, ReadonlyMap<string, "file" | "directory">>();
   const includeCache = new IncludeAnalysisCache();
   const fileSystem = connectionFileSystem(connection, documents);
-  const currentTargetVersion = () =>
-    resolveTargetVersion(settings.targetVersion, {
+  const targetVersionFor = (settings: ServerSettings, uri: string) => {
+    const detectedTargetVersion = detectedTargetVersions.get(fileSystem.normalize(uri));
+    return resolveTargetVersion(settings.targetVersion, {
       allowed: settings.targetVersion === "auto" && detectedTargetVersion !== undefined,
       ...(detectedTargetVersion === undefined ? {} : { version: detectedTargetVersion }),
     });
+  };
+  const settingsFor = (uri: string): Promise<ServerSettings> => {
+    if (!supportsResourceConfiguration) return Promise.resolve(fallbackSettings);
+    const cached = resourceSettings.get(uri);
+    if (cached !== undefined) return cached;
+    const requested = (async (): Promise<ServerSettings> => {
+      try {
+        const candidate: unknown = await connection.workspace.getConfiguration({
+          scopeUri: uri,
+          section: "logrotate",
+        });
+        return normalizeServerSettings(candidate);
+      } catch (error) {
+        connection.console.warn(
+          `[workspace/configuration] Unable to read settings for ${formatResourceForLog(uri)}; using defaults: ${safeLogText(errorMessage(error))}`,
+        );
+        return defaultSettings;
+      }
+    })();
+    resourceSettings.set(uri, requested);
+    return requested;
+  };
 
   const cancelPending = (uri: string): void => {
     const pending = pendingDiagnostics.get(uri);
@@ -115,17 +140,21 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     const handle = timers.setTimeout((): void => {
       pendingDiagnostics.delete(document.uri);
       if (documents.get(document.uri)?.version !== version) return;
-      const job = publishDiagnostics(
-        connection,
-        documents,
-        document,
-        settings,
-        fileSystem,
-        loadedIncludes,
-        loadedResources,
-        includeCache,
-        currentTargetVersion().version,
-      ).catch((error: unknown): void => {
+      const job = (async (): Promise<void> => {
+        const settings = await settingsFor(document.uri);
+        if (documents.get(document.uri)?.version !== version) return;
+        await publishDiagnostics(
+          connection,
+          documents,
+          document,
+          settings,
+          fileSystem,
+          loadedIncludes,
+          loadedResources,
+          includeCache,
+          targetVersionFor(settings, document.uri).version,
+        );
+      })().catch((error: unknown): void => {
         connection.console.error(
           `[textDocument/publishDiagnostics] Analysis failed for ${formatResourceForLog(document.uri)}: ${safeLogText(errorMessage(error))}`,
         );
@@ -153,6 +182,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
   };
 
   connection.onInitialize((params: InitializeParams): InitializeResult => {
+    supportsResourceConfiguration = params.capabilities.workspace?.configuration === true;
     const client = params.clientInfo?.name ?? "unknown client";
     connection.console.info(
       `[initialize] Initializing Logrotate language server for ${safeLogText(client)}.`,
@@ -187,19 +217,18 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
   });
 
   connection.onDidChangeConfiguration((event): void => {
-    const candidate = (event.settings as { readonly logrotate?: Partial<ServerSettings> })
-      .logrotate;
-    settings = {
-      validation: {
-        enable: candidate?.validation?.enable ?? defaultSettings.validation.enable,
-        maxProblems: candidate?.validation?.maxProblems ?? defaultSettings.validation.maxProblems,
-      },
-      targetVersion: candidate?.targetVersion ?? defaultSettings.targetVersion,
-    };
+    resourceSettings.clear();
     includeCache.clear();
-    connection.console.info(
-      `[workspace/didChangeConfiguration] Configuration updated: validation=${settings.validation.enable ? "enabled" : "disabled"}, maxProblems=${settings.validation.maxProblems}, targetVersion=${safeLogText(settings.targetVersion)}.`,
-    );
+    if (supportsResourceConfiguration) {
+      connection.console.info(
+        `[workspace/didChangeConfiguration] Resource configuration invalidated for ${documents.all().length} open document(s).`,
+      );
+    } else {
+      fallbackSettings = normalizeServerSettings(logrotateSettings(event.settings));
+      connection.console.info(
+        `[workspace/didChangeConfiguration] Configuration updated: validation=${fallbackSettings.validation.enable ? "enabled" : "disabled"}, maxProblems=${fallbackSettings.validation.maxProblems}, targetVersion=${safeLogText(fallbackSettings.targetVersion)}.`,
+      );
+    }
     for (const document of documents.all()) {
       scheduleDiagnostics(document);
     }
@@ -214,18 +243,40 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     scheduleAffectedRoots(normalized);
   });
 
-  connection.onNotification(detectedTargetVersionNotification, ({ version }): void => {
+  connection.onNotification(detectedTargetVersionNotification, ({ uri, version }): void => {
+    if (typeof uri !== "string" || uri.length > 4096) {
+      connection.console.warn(
+        "[logrotate/targetVersion/detected] Ignored a detected version without a valid resource URI.",
+      );
+      return;
+    }
+    let normalized: string;
+    try {
+      normalized = fileSystem.normalize(uri);
+    } catch {
+      connection.console.warn(
+        "[logrotate/targetVersion/detected] Ignored a detected version with an invalid resource URI.",
+      );
+      return;
+    }
     const next = validDetectedVersion(version) ? version : undefined;
-    if (next === detectedTargetVersion) return;
-    detectedTargetVersion = next;
+    if (next === detectedTargetVersions.get(normalized)) return;
+    if (next === undefined) detectedTargetVersions.delete(normalized);
+    else detectedTargetVersions.set(normalized, next);
     includeCache.clear();
-    const resolved = currentTargetVersion();
+    const resolved = resolveTargetVersion("auto", {
+      allowed: next !== undefined,
+      ...(next === undefined ? {} : { version: next }),
+    });
     connection.console.info(
       next === undefined
-        ? `[logrotate/targetVersion/detected] Local version unavailable; auto uses reviewed logrotate ${resolved.version}.`
-        : `[logrotate/targetVersion/detected] Detected local logrotate ${safeLogText(next)}; auto resolves to ${resolved.version}.`,
+        ? `[logrotate/targetVersion/detected] Local version unavailable for ${formatResourceForLog(normalized)}; auto uses reviewed logrotate ${resolved.version}.`
+        : `[logrotate/targetVersion/detected] Detected local logrotate ${safeLogText(next)} for ${formatResourceForLog(normalized)}; auto resolves to ${resolved.version}.`,
     );
-    for (const document of documents.all()) scheduleDiagnostics(document);
+    const document = documents
+      .all()
+      .find((candidate) => fileSystem.normalize(candidate.uri) === normalized);
+    if (document !== undefined) scheduleDiagnostics(document);
   });
 
   documents.onDidOpen(({ document }): void => {
@@ -243,6 +294,8 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
   });
   documents.onDidClose(({ document }): void => {
     cancelPending(document.uri);
+    resourceSettings.delete(document.uri);
+    detectedTargetVersions.delete(fileSystem.normalize(document.uri));
     includeCache.invalidate(document.uri);
     connection.console.info(
       `[textDocument/didClose] Closed ${formatResourceForLog(document.uri)}.`,
@@ -328,7 +381,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       }));
   });
 
-  connection.onHover((params): Hover | null => {
+  connection.onHover(async (params): Promise<Hover | null> => {
     const document = documents.get(params.textDocument.uri);
     if (document === undefined) {
       return null;
@@ -352,7 +405,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       definition.interactions.length === 0
         ? ""
         : `\n\nRelated: ${definition.interactions.map((name) => `\`${name}\``).join(", ")}.`;
-    const target = currentTargetVersion();
+    const target = targetVersionFor(await settingsFor(document.uri), document.uri);
     return {
       range: word.range,
       contents: {
@@ -658,12 +711,15 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     return builder.build();
   });
 
-  connection.onCodeAction((params): CodeAction[] => {
+  connection.onCodeAction(async (params): Promise<CodeAction[]> => {
     const document = documents.get(params.textDocument.uri);
     if (document === undefined || document.languageId === "logrotate-state") {
       return [];
     }
-    const parsed = parse(document.getText(), { targetVersion: currentTargetVersion().version });
+    const settings = await settingsFor(document.uri);
+    const parsed = parse(document.getText(), {
+      targetVersion: targetVersionFor(settings, document.uri).version,
+    });
     const selectedPath = quotablePathSelection(document, parsed, params.range);
     const selectionActions: CodeAction[] =
       selectedPath === undefined
@@ -790,6 +846,38 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
 
   documents.listen(connection);
   connection.listen();
+}
+
+function logrotateSettings(settings: unknown): unknown {
+  return isRecord(settings) ? settings["logrotate"] : undefined;
+}
+
+function normalizeServerSettings(candidate: unknown): ServerSettings {
+  if (!isRecord(candidate)) return defaultSettings;
+  const validation = isRecord(candidate["validation"]) ? candidate["validation"] : undefined;
+  const enable = validation?.["enable"];
+  const requestedMaximum = validation?.["maxProblems"];
+  const requestedTarget = candidate["targetVersion"];
+  return {
+    validation: {
+      enable: typeof enable === "boolean" ? enable : defaultSettings.validation.enable,
+      maxProblems:
+        typeof requestedMaximum === "number" &&
+        Number.isInteger(requestedMaximum) &&
+        requestedMaximum >= 1 &&
+        requestedMaximum <= 1000
+          ? requestedMaximum
+          : defaultSettings.validation.maxProblems,
+    },
+    targetVersion:
+      typeof requestedTarget === "string" && requestedTarget.length <= 64
+        ? requestedTarget
+        : defaultSettings.targetVersion,
+  };
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null;
 }
 
 async function publishDiagnostics(

@@ -16,6 +16,7 @@ import type {
   SymbolInformation,
   TextEdit,
 } from "vscode-languageserver";
+import { detectedTargetVersionNotification } from "../src/protocol.js";
 import { createServerHarness, type ServerHarness } from "./harness.js";
 
 const uri = "file:///workspace/logrotate.conf";
@@ -99,6 +100,65 @@ describe("shared language server edge contracts", () => {
     await harness.waitForDiagnostics(uri, (items) => items.length === 0);
     const hover = await send<Hover | null>("textDocument/hover", at(0, 2));
     expect(hoverText(hover)).toContain("Target: 3.22");
+  });
+
+  it("isolates resource settings and refreshes the configuration cache after changes", async () => {
+    const disabledUri = "file:///workspace/disabled/logrotate.conf";
+    const limitedUri = "file:///workspace/limited/logrotate.conf";
+    const resourceSettings = new Map<string, unknown>([
+      [disabledUri, { validation: { enable: false, maxProblems: 100 }, targetVersion: "auto" }],
+      [limitedUri, { validation: { enable: true, maxProblems: 2 }, targetVersion: "auto" }],
+    ]);
+    harness = await createServerHarness({}, undefined, {
+      getConfiguration(scopeUri, section): unknown {
+        expect(section).toBe("logrotate");
+        return scopeUri === undefined ? undefined : resourceSettings.get(scopeUri);
+      },
+    });
+
+    const source = `daily\n${"UNKNOWN\n".repeat(5)}`;
+    await harness.open(disabledUri, "logrotate", source);
+    await harness.open(limitedUri, "logrotate", source);
+    expect(
+      await harness.waitForDiagnostics(disabledUri, (items) => items.length === 0),
+    ).toMatchObject({ uri: disabledUri, diagnostics: [] });
+    expect(
+      (await harness.waitForDiagnostics(limitedUri, (items) => items.length === 2)).diagnostics,
+    ).toHaveLength(2);
+    await harness.client.sendNotification(detectedTargetVersionNotification, {
+      uri: limitedUri,
+      version: "3.22.0",
+    });
+    await harness.waitForLog(
+      ({ message }) =>
+        message.includes("Detected local logrotate 3.22.0") && message.includes(limitedUri),
+    );
+
+    const disabledHover = await send<Hover | null>("textDocument/hover", {
+      textDocument: { uri: disabledUri },
+      position: { line: 0, character: 2 },
+    });
+    const limitedHover = await send<Hover | null>("textDocument/hover", {
+      textDocument: { uri: limitedUri },
+      position: { line: 0, character: 2 },
+    });
+    expect(hoverText(disabledHover)).toContain("Target: 3.22 (latest fallback)");
+    expect(hoverText(limitedHover)).toContain("Target: 3.22 (detected)");
+    expect(harness.configurationRequestCount(disabledUri)).toBe(1);
+    expect(harness.configurationRequestCount(limitedUri)).toBe(1);
+
+    resourceSettings.set(disabledUri, {
+      validation: { enable: true, maxProblems: 1 },
+      targetVersion: "3.22",
+    });
+    await harness.configure({});
+    await harness.waitForLog(({ message }) =>
+      message.includes("Resource configuration invalidated"),
+    );
+    expect(
+      (await harness.waitForDiagnostics(disabledUri, (items) => items.length === 1)).diagnostics,
+    ).toHaveLength(1);
+    expect(harness.configurationRequestCount(disabledUri)).toBe(2);
   });
 
   it("handles cancellation, script terminators, bounded paths, and unavailable paths", async () => {

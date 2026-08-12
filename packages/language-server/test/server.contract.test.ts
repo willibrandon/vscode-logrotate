@@ -227,6 +227,7 @@ describe("shared language server contract", () => {
     await harness.waitForDiagnostics(uri);
 
     await harness.client.sendNotification(detectedTargetVersionNotification, {
+      uri,
       version: "3.22.0",
     });
     await harness.waitForLog(({ message }) => message.includes("Detected local logrotate 3.22.0"));
@@ -235,6 +236,7 @@ describe("shared language server contract", () => {
     ).toContain("Target: 3.22 (detected)");
 
     await harness.client.sendNotification(detectedTargetVersionNotification, {
+      uri,
       version: "3.22.0\n[error] forged",
     });
     await harness.waitForLog(({ message }) => message.includes("Local version unavailable"));

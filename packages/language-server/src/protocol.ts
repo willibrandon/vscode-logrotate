@@ -30,6 +30,7 @@ export interface IncludedResourceChangedParams {
 }
 
 export interface DetectedTargetVersionParams {
+  readonly uri: string;
   readonly version: string | null;
 }
 

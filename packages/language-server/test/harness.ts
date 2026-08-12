@@ -5,6 +5,7 @@ import {
   StreamMessageWriter,
 } from "vscode-languageserver/node";
 import type {
+  ConfigurationParams,
   Diagnostic,
   InitializeResult,
   LogMessageParams,
@@ -52,6 +53,13 @@ interface LoadedIncludesWaiter {
   readonly resolve: (params: LoadedIncludesParams) => void;
 }
 
+export interface ServerHarnessOptions {
+  readonly getConfiguration?: (
+    scopeUri: string | undefined,
+    section: string | undefined,
+  ) => unknown;
+}
+
 export interface ServerHarness {
   readonly client: MessageConnection;
   readonly initializeResult: InitializeResult;
@@ -75,12 +83,14 @@ export interface ServerHarness {
     after?: number,
   ): Promise<LoadedIncludesParams>;
   fileReadCount(uri: string): number;
+  configurationRequestCount(uri: string): number;
   dispose(): Promise<void>;
 }
 
 export async function createServerHarness(
   files: Readonly<Record<string, TestFile>> = {},
   timers: TimerHost = fastTimers,
+  options: ServerHarnessOptions = {},
 ): Promise<ServerHarness> {
   const clientToServer = new PassThrough();
   const serverToClient = new PassThrough();
@@ -99,6 +109,7 @@ export async function createServerHarness(
   const loadedIncludeNotifications: LoadedIncludesParams[] = [];
   const loadedIncludesWaiters: LoadedIncludesWaiter[] = [];
   const fileReadCounts = new Map<string, number>();
+  const configurationRequestCounts = new Map<string, number>();
 
   client.onNotification(
     "textDocument/publishDiagnostics",
@@ -159,13 +170,28 @@ export async function createServerHarness(
       ...(file.etag === undefined ? {} : { etag: file.etag }),
     };
   });
+  if (options.getConfiguration !== undefined) {
+    client.onRequest("workspace/configuration", ({ items }: ConfigurationParams): unknown[] =>
+      items.map(({ scopeUri, section }) => {
+        if (scopeUri !== undefined) {
+          configurationRequestCounts.set(
+            scopeUri,
+            (configurationRequestCounts.get(scopeUri) ?? 0) + 1,
+          );
+        }
+        return options.getConfiguration?.(scopeUri, section);
+      }),
+    );
+  }
   client.listen();
   startLanguageServer(server, timers);
 
   const initializeResult = await client.sendRequest<InitializeResult>("initialize", {
     processId: null,
     rootUri: null,
-    capabilities: {},
+    capabilities: {
+      workspace: { configuration: options.getConfiguration !== undefined },
+    },
   });
   await client.sendNotification("initialized", {});
 
@@ -247,6 +273,9 @@ export async function createServerHarness(
     },
     fileReadCount(uri): number {
       return fileReadCounts.get(uri) ?? 0;
+    },
+    configurationRequestCount(uri): number {
+      return configurationRequestCounts.get(uri) ?? 0;
     },
     async dispose(): Promise<void> {
       await client.sendRequest("shutdown");

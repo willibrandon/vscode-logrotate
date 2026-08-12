@@ -41,7 +41,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const activeValidations = new Map<string, AbortController>();
   let versionDetection: AbortController | undefined;
   let detectionKey: string | undefined;
-  let detectedVersion: string | null = null;
+  const detectedVersions = new Map<string, string | null>();
   context.subscriptions.push(diagnostics);
   context.subscriptions.push({
     dispose(): void {
@@ -130,8 +130,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (mode === "onSave") await validate(document, false);
     }),
     vscode.workspace.onDidCloseTextDocument((document): void => {
-      activeValidations.get(document.uri.toString())?.abort();
-      activeValidations.delete(document.uri.toString());
+      const uri = document.uri.toString();
+      activeValidations.get(uri)?.abort();
+      activeValidations.delete(uri);
+      detectedVersions.delete(uri);
       diagnostics.delete(document.uri);
     }),
     vscode.workspace.onDidChangeTextDocument(async ({ document }): Promise<void> => {
@@ -145,18 +147,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   output.info("Starting Logrotate language server.");
   await client.start();
   output.info("Logrotate language server started.");
-  const publishDetectedVersion = async (version: string | null): Promise<void> => {
-    if (version === detectedVersion) return;
-    detectedVersion = version;
-    await languageClient.sendNotification(detectedTargetVersionNotification, { version });
+  const publishDetectedVersion = async (
+    resource: vscode.Uri,
+    version: string | null,
+    force: boolean,
+  ): Promise<void> => {
+    const uri = resource.toString();
+    if (!force && detectedVersions.has(uri) && version === detectedVersions.get(uri)) return;
+    detectedVersions.set(uri, version);
+    await languageClient.sendNotification(detectedTargetVersionNotification, { uri, version });
   };
   const refreshTargetVersion = async (force = false): Promise<void> => {
     const resource = vscode.window.activeTextEditor?.document.uri;
+    if (resource === undefined) {
+      detectionKey = undefined;
+      versionDetection?.abort();
+      versionDetection = undefined;
+      return;
+    }
     const configuration = vscode.workspace.getConfiguration("logrotate", resource);
     const targetVersion = configuration.get<string>("targetVersion", "latest");
     const executable = configuration.get<string>("executablePath", "logrotate");
-    const scheme = resource?.scheme ?? vscode.workspace.workspaceFolders?.[0]?.uri.scheme;
-    const key = `${targetVersion}\0${executable}\0${scheme ?? "none"}\0${String(vscode.workspace.isTrusted)}`;
+    const scheme = resource.scheme;
+    const key = `${resource.toString()}\0${targetVersion}\0${executable}\0${scheme}\0${String(vscode.workspace.isTrusted)}`;
     if (!force && key === detectionKey) return;
     detectionKey = key;
     versionDetection?.abort();
@@ -169,7 +182,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         targetVersion,
       })
     ) {
-      await publishDetectedVersion(null);
+      await publishDetectedVersion(resource, null, force);
       return;
     }
     const controller = new AbortController();
@@ -180,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         isTrusted: () => vscode.workspace.isTrusted,
       });
       if (controller.signal.aborted || versionDetection !== controller) return;
-      await publishDetectedVersion(version ?? null);
+      await publishDetectedVersion(resource, version ?? null, force);
       output.info(
         version === undefined
           ? "Installed logrotate version was unavailable; auto target uses the latest reviewed version."
@@ -188,7 +201,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       );
     } catch (error) {
       if (controller.signal.aborted || versionDetection !== controller) return;
-      await publishDetectedVersion(null);
+      await publishDetectedVersion(resource, null, force);
       output.info(
         `Installed logrotate version was unavailable; auto target uses the latest reviewed version (${safeMessage(error instanceof Error ? error.message : String(error))}).`,
       );

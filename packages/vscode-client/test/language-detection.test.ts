@@ -19,6 +19,7 @@ describe("logrotate content detection", () => {
     "relative/path.log {",
     "logrotate state -- version 3",
     `${"/var/log/a".padEnd(8193, "a")} {`,
+    `/${"\\!".repeat(4096)} {`,
   ])("leaves unrelated or unbounded content unchanged: %j", (firstLine) => {
     expect(detectLogrotateLanguage(firstLine)).toBeUndefined();
   });

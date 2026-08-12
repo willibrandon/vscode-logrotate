@@ -127,6 +127,7 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.lineAt(2).text, "  # ");
     assert.equal(document.lineAt(4).text, "    echo rotated");
 
+    editor.selections = selections.slice(0, 3);
     await executeAndWaitForDocumentChange("editor.action.commentLine", document);
     assert.equal(document.getText(), source);
   });

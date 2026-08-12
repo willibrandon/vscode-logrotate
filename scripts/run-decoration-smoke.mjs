@@ -106,8 +106,17 @@ try {
   );
 } finally {
   await browser?.close().catch(() => undefined);
-  if (child !== undefined && child.exitCode === null && child.signalCode === null) child.kill();
-  await rm(temporaryRoot, { recursive: true, force: true });
+  if (child !== undefined) await stopEditorProcess(child);
+  await rm(temporaryRoot, {
+    recursive: true,
+    force: true,
+    maxRetries: 20,
+    retryDelay: 250,
+  }).catch((error) => {
+    process.stderr.write(
+      `Unable to remove the decoration smoke-test directory: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  });
 }
 
 async function availablePort() {
@@ -168,4 +177,14 @@ function requireRunning(editorProcess) {
 
 function delay(milliseconds) {
   return new Promise((resolvePromise) => globalThis.setTimeout(resolvePromise, milliseconds));
+}
+
+async function stopEditorProcess(editorProcess) {
+  if (editorProcess.exitCode !== null || editorProcess.signalCode !== null) return;
+  const exited = new Promise((resolvePromise) => editorProcess.once("close", resolvePromise));
+  editorProcess.kill();
+  await Promise.race([exited, delay(5_000)]);
+  if (editorProcess.exitCode !== null || editorProcess.signalCode !== null) return;
+  editorProcess.kill("SIGKILL");
+  await Promise.race([exited, delay(5_000)]);
 }

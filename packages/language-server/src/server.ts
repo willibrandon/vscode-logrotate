@@ -62,6 +62,7 @@ import {
   loadedIncludesNotification,
   readDirectoryRequest,
   readFileRequest,
+  refreshDiagnosticsNotification,
   statRequest,
 } from "./protocol.js";
 
@@ -243,6 +244,24 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     scheduleAffectedRoots(normalized);
   });
 
+  connection.onNotification(refreshDiagnosticsNotification, ({ uri }): void => {
+    if (typeof uri !== "string" || uri.length > 4096) return;
+    let normalized: string;
+    try {
+      normalized = fileSystem.normalize(uri);
+    } catch {
+      return;
+    }
+    const document = documents
+      .all()
+      .find((candidate) => fileSystem.normalize(candidate.uri) === normalized);
+    if (document === undefined) return;
+    connection.console.info(
+      `[logrotate/diagnostics/refresh] Refreshing diagnostics for ${formatResourceForLog(document.uri)} after language association.`,
+    );
+    scheduleDiagnostics(document);
+  });
+
   connection.onNotification(detectedTargetVersionNotification, ({ uri, version }): void => {
     if (typeof uri !== "string" || uri.length > 4096) {
       connection.console.warn(
@@ -284,10 +303,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     connection.console.info(
       `[textDocument/didOpen] Opened ${formatResourceForLog(document.uri)} (${safeLogText(document.languageId)}, version ${document.version}).`,
     );
-    // Opening an included resource can expose diagnostics that were published while the resource
-    // was still closed. Republish them for the open document version without the edit debounce so
-    // VS Code can attach editor decorations immediately.
-    scheduleDiagnostics(document, 0);
+    scheduleDiagnostics(document);
     scheduleAffectedRoots(document.uri, document.uri);
   });
   documents.onDidChangeContent(({ document }): void => {

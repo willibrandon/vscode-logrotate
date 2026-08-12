@@ -1,0 +1,16 @@
+{
+  "name": "logrotate-conflict-fixture",
+  "displayName": "Logrotate conflict fixture",
+  "description": "Forces the decoration smoke fixture into a competing language once.",
+  "version": "0.0.0",
+  "publisher": "willibrandon",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "main": "./extension.cjs",
+  "activationEvents": [
+    "onLanguage:logrotate",
+    "onStartupFinished"
+  ]
+}

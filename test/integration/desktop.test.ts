@@ -25,7 +25,7 @@ suite("Logrotate desktop extension", () => {
 
     const installedPathPrefix = process.env["EXPECTED_INSTALLED_EXTENSION_PATH_PREFIX"];
     if (installedPathPrefix !== undefined) {
-      assert.equal(manifest.version, "0.1.7");
+      assert.equal(manifest.version, process.env["EXPECTED_INSTALLED_EXTENSION_VERSION"]);
       assert.ok(
         extension.extensionPath.startsWith(installedPathPrefix),
         `expected packaged extension under ${installedPathPrefix}, received ${extension.extensionPath}`,
@@ -49,11 +49,12 @@ suite("Logrotate desktop extension", () => {
       `expected LR1001 for included.conf, received ${JSON.stringify(diagnostics)}`,
     );
 
+    const activeEditorDiagnostics = waitForActiveEditorDiagnostics(includedUri);
     const includedDocument = await vscode.workspace.openTextDocument(includedUri);
     await vscode.window.showTextDocument(includedDocument);
     const associatedDocument = await waitForLanguage(includedUri, "logrotate");
     assert.equal(associatedDocument.languageId, "logrotate");
-    const openedDiagnostics = await waitForDiagnostics(includedUri);
+    const openedDiagnostics = await activeEditorDiagnostics;
     const openedUnknownDirective = openedDiagnostics.find(({ code }) => code === "LR1001");
     assert.ok(openedUnknownDirective, "expected LR1001 after included.conf opened in the editor");
     assert.deepEqual(openedUnknownDirective.range, new vscode.Range(1, 4, 1, 10));
@@ -126,6 +127,7 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.lineAt(2).text, "  # ");
     assert.equal(document.lineAt(4).text, "    echo rotated");
 
+    editor.selections = selections.slice(0, 3);
     await executeAndWaitForDocumentChange("editor.action.commentLine", document);
     assert.equal(document.getText(), source);
   });
@@ -149,6 +151,29 @@ async function toggleCommentsAfterEmbeddedLanguagesLoad(
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   assert.fail("embedded shell language did not become available to the comment command");
+}
+
+function waitForActiveEditorDiagnostics(uri: vscode.Uri): Promise<readonly vscode.Diagnostic[]> {
+  return new Promise((resolve, reject): void => {
+    const timeout = setTimeout((): void => {
+      subscription.dispose();
+      reject(new Error(`Timed out waiting for active-editor diagnostics for ${uri.toString()}.`));
+    }, 10_000);
+    const subscription = vscode.languages.onDidChangeDiagnostics(({ uris }): void => {
+      const activeUri = vscode.window.activeTextEditor?.document.uri.toString();
+      if (
+        activeUri !== uri.toString() ||
+        !uris.some((changed) => changed.toString() === activeUri)
+      ) {
+        return;
+      }
+      const diagnostics = vscode.languages.getDiagnostics(uri);
+      if (!diagnostics.some(({ code }) => code === "LR1001")) return;
+      clearTimeout(timeout);
+      subscription.dispose();
+      resolve(diagnostics);
+    });
+  });
 }
 
 async function executeAndWaitForDocumentChange(

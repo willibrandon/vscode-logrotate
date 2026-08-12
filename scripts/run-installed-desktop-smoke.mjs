@@ -13,6 +13,7 @@ export async function runInstalledDesktopSmoke(options) {
     version,
   } = options;
   const commandEnvironment = { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" };
+  const expectedVersion = expectedIdentity.slice(expectedIdentity.lastIndexOf("@") + 1);
   const profileArguments = [
     `--extensions-dir=${extensionsDirectory}`,
     `--user-data-dir=${userDataDirectory}`,
@@ -47,6 +48,7 @@ export async function runInstalledDesktopSmoke(options) {
   const exitCode = await run(command, arguments_, {
     ...commandEnvironment,
     LOGROTATE_VSIX_EXTENSIONS_DIR: extensionsDirectory,
+    LOGROTATE_VSIX_EXPECTED_VERSION: expectedVersion,
     LOGROTATE_VSIX_USER_DATA_DIR: userDataDirectory,
     VSCODE_VERSION: version,
   });

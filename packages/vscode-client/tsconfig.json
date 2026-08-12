@@ -7,7 +7,7 @@
     "tsBuildInfoFile": "../../node_modules/.cache/vscode-client.tsbuildinfo",
     "types": ["vscode"]
   },
-  "include": ["src/common.ts", "src/external-validation-policy.ts"],
+  "include": ["src/common.ts", "src/external-validation-policy.ts", "src/language-detection.ts"],
   "references": [
     {
       "path": "../language-server"

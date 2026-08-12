@@ -3,6 +3,7 @@ import { LanguageClient } from "vscode-languageclient/browser";
 import {
   clientOptions,
   registerCommonCommands,
+  registerContentDetection,
   registerFileSystemBridge,
   registerLoadedIncludeSupport,
 } from "./common.js";
@@ -25,8 +26,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
+  registerContentDetection(context, { client, output });
   registerFileSystemBridge(context, { client, output });
-  registerLoadedIncludeSupport(context, { client, output });
+  registerLoadedIncludeSupport(context, { client, fileUriCaseInsensitive: false, output });
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "logrotate.validateWithInstalledLogrotate",

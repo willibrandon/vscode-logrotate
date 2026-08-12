@@ -2,8 +2,13 @@ import { resolve } from "node:path";
 import { defineConfig } from "@vscode/test-cli";
 
 const extensionsDirectory = process.env.LOGROTATE_VSIX_EXTENSIONS_DIR;
+const expectedVersion = process.env.LOGROTATE_VSIX_EXPECTED_VERSION;
 const userDataDirectory = process.env.LOGROTATE_VSIX_USER_DATA_DIR;
-if (extensionsDirectory === undefined || userDataDirectory === undefined) {
+if (
+  extensionsDirectory === undefined ||
+  expectedVersion === undefined ||
+  userDataDirectory === undefined
+) {
   throw new Error("The VSIX smoke test requires isolated extension and user-data directories.");
 }
 
@@ -14,6 +19,7 @@ export default defineConfig({
   version: process.env.VSCODE_VERSION ?? "stable",
   env: {
     EXPECTED_INSTALLED_EXTENSION_PATH_PREFIX: extensionsDirectory,
+    EXPECTED_INSTALLED_EXTENSION_VERSION: expectedVersion,
   },
   mocha: {
     timeout: 30_000,

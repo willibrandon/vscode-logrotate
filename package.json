@@ -2,7 +2,7 @@
   "name": "logrotate",
   "displayName": "Logrotate",
   "description": "Language support for logrotate configuration and state files",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "license": "MIT",
   "publisher": "willibrandon",
@@ -43,6 +43,9 @@
     "workspace",
     "ui"
   ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "capabilities": {
     "virtualWorkspaces": {
       "supported": true,
@@ -73,7 +76,7 @@
           "**/*.logrotate",
           "**/*.logrotate.conf"
         ],
-        "firstLine": "^\\s*(?:\"(?:[^\"\\\\]|\\\\.)+\"|'(?:[^'\\\\]|\\\\.)+'|(?:/|~/)(?:[^\\s{}#]|\\\\.)+)(?:\\s+(?:\"(?:[^\"\\\\]|\\\\.)+\"|'(?:[^'\\\\]|\\\\.)+'|(?:/|~/)(?:[^\\s{}#]|\\\\.)+))*\\s*\\{\\s*(?:#.*)?$",
+        "firstLine": "^\\s*(?:\"(?:[^\"\\\\]|\\\\.)+\"|'(?:[^'\\\\]|\\\\.)+'|(?:/|~/)(?:[^\\s{}#\\\\]|\\\\.)+)(?:\\s+(?:\"(?:[^\"\\\\]|\\\\.)+\"|'(?:[^'\\\\]|\\\\.)+'|(?:/|~/)(?:[^\\s{}#\\\\]|\\\\.)+))*\\s*\\{\\s*(?:#.*)?$",
         "configuration": "./language-configuration.json"
       },
       {
@@ -260,6 +263,7 @@
     "test:installed-logrotate": "node ./scripts/check-installed-logrotate.mjs",
     "verify:marketplace": "node ./scripts/verify-marketplace-release.mjs",
     "test:integration": "npm run build && node ./scripts/run-desktop-tests.mjs",
+    "test:decoration": "npm run build && node ./scripts/run-decoration-smoke.mjs",
     "test:web": "npm run build && node ./scripts/run-web-tests.mjs",
     "capture:themes": "npm run build && node ./scripts/capture-theme-screenshots.mjs",
     "build": "node ./esbuild.mjs",

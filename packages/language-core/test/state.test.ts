@@ -33,4 +33,17 @@ describe("state parser", () => {
         ?.code,
     ).toBe("LRS1005");
   });
+
+  it("models upstream year/day compatibility and rejects malformed quoting and comments", () => {
+    expect(parseState('logrotate state -- version 1\n"/path" 1900-1-0\n').diagnostics).toEqual([]);
+    expect(
+      parseState('logrotate state -- version 2\n"/path" 1969-1-1\n').diagnostics[0]?.code,
+    ).toBe("LRS1005");
+    expect(
+      parseState('logrotate state -- version 2\n"unfinished 2026-1-1\n').diagnostics[0]?.code,
+    ).toBe("LRS1006");
+    expect(parseState("logrotate state -- version 2\n# comment\n").diagnostics[0]?.code).toBe(
+      "LRS1003",
+    );
+  });
 });

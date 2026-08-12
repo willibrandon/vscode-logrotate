@@ -8,19 +8,26 @@ import type {
 
 export function analyze(document: ParsedDocument): readonly CoreDiagnostic[] {
   const diagnostics: CoreDiagnostic[] = [...document.diagnostics];
-  analyzeSequence(document.children, diagnostics);
-  return diagnostics;
+  const globals: DirectiveNode[] = [];
+
+  for (const node of document.children) {
+    if (node.kind === "directive") {
+      globals.push(node);
+    } else if (node.kind === "rotation-block") {
+      analyzeAssignments([...globals, ...collectDirectives(node.children)], diagnostics);
+    }
+  }
+  analyzeAssignments(globals, diagnostics);
+  return diagnostics.slice(0, document.maxProblems);
 }
 
-function analyzeSequence(nodes: readonly DocumentNode[], diagnostics: CoreDiagnostic[]): void {
-  const directives = collectDirectives(nodes);
-  const effective = new Map<string, DirectiveNode>();
-  for (const directive of directives) {
-    effective.set(directive.name, directive);
-  }
+function analyzeAssignments(
+  directives: readonly DirectiveNode[],
+  diagnostics: CoreDiagnostic[],
+): void {
   warnPrerequisite(
     diagnostics,
-    effective,
+    directives,
     "delaycompress",
     "compress",
     "LR2002",
@@ -29,7 +36,7 @@ function analyzeSequence(nodes: readonly DocumentNode[], diagnostics: CoreDiagno
   for (const name of ["dateformat", "dateyesterday", "datehourago"]) {
     warnPrerequisite(
       diagnostics,
-      effective,
+      directives,
       name,
       "dateext",
       "LR2003",
@@ -39,7 +46,7 @@ function analyzeSequence(nodes: readonly DocumentNode[], diagnostics: CoreDiagno
   for (const name of ["mailfirst", "maillast"]) {
     warnPrerequisite(
       diagnostics,
-      effective,
+      directives,
       name,
       "mail",
       "LR2004",
@@ -48,14 +55,19 @@ function analyzeSequence(nodes: readonly DocumentNode[], diagnostics: CoreDiagno
   }
   warnPrerequisite(
     diagnostics,
-    effective,
+    directives,
     "shredcycles",
     "shred",
     "LR2005",
     "shredcycles has no effect unless shredding is enabled.",
   );
-  const create = effective.get("create");
-  const copy = effective.get("copy") ?? effective.get("copytruncate");
+
+  const create = activeDirective(directives, "create");
+  const copy = latestOf(
+    [activeDirective(directives, "copy"), activeDirective(directives, "copytruncate")].filter(
+      (directive): directive is DirectiveNode => directive !== undefined,
+    ),
+  );
   if (create !== undefined && copy !== undefined) {
     diagnostics.push({
       code: "LR2006",
@@ -67,9 +79,11 @@ function analyzeSequence(nodes: readonly DocumentNode[], diagnostics: CoreDiagno
       related: [copy.nameSpan],
     });
   }
+
   const copyModes = ["copy", "copytruncate", "renamecopy"]
-    .map((name) => effective.get(name))
-    .filter((directive): directive is DirectiveNode => directive !== undefined);
+    .map((name) => activeDirective(directives, name))
+    .filter((directive): directive is DirectiveNode => directive !== undefined)
+    .sort((left, right) => left.start - right.start);
   if (copyModes.length > 1) {
     const last = copyModes.at(-1);
     if (last !== undefined) {
@@ -84,40 +98,48 @@ function analyzeSequence(nodes: readonly DocumentNode[], diagnostics: CoreDiagno
       });
     }
   }
-  for (const node of nodes) {
-    if (node.kind === "rotation-block") {
-      analyzeSequence(node.children, diagnostics);
-    }
-  }
 }
 
 function collectDirectives(nodes: readonly DocumentNode[]): DirectiveNode[] {
   return nodes.flatMap((node) => {
-    if (node.kind === "directive") {
-      return [node];
-    }
-    if (node.kind === "include") {
-      return [node.directive];
-    }
-    if (node.kind === "script") {
-      return [node.starter, ...(node.terminator === undefined ? [] : [node.terminator])];
-    }
+    if (node.kind === "directive") return [node];
+    if (node.kind === "script") return [node.starter];
     return [];
   });
 }
 
+function activeDirective(
+  directives: readonly DirectiveNode[],
+  positiveName: string,
+): DirectiveNode | undefined {
+  const definition = directives.find(({ name }) => name === positiveName)?.definition;
+  const negativeName = definition?.negatedBy;
+  const candidates = directives.filter(
+    ({ name }) => name === positiveName || (negativeName !== null && name === negativeName),
+  );
+  const latest = candidates.at(-1);
+  return latest?.name === positiveName ? latest : undefined;
+}
+
+function latestOf(directives: readonly DirectiveNode[]): DirectiveNode | undefined {
+  return directives.reduce<DirectiveNode | undefined>(
+    (latest, directive) =>
+      latest === undefined || directive.start > latest.start ? directive : latest,
+    undefined,
+  );
+}
+
 function warnPrerequisite(
   diagnostics: CoreDiagnostic[],
-  effective: ReadonlyMap<string, DirectiveNode>,
+  directives: readonly DirectiveNode[],
   dependentName: string,
   prerequisiteName: string,
   code: string,
   message: string,
 ): void {
-  const dependent = effective.get(dependentName);
-  const prerequisite = effective.get(prerequisiteName);
-  const disabled = effective.has(`no${prerequisiteName}`);
-  if (dependent !== undefined && (prerequisite === undefined || disabled)) {
+  const dependent = activeDirective(directives, dependentName);
+  const prerequisite = activeDirective(directives, prerequisiteName);
+  if (dependent !== undefined && prerequisite === undefined) {
     diagnostics.push({
       code,
       severity: "warning",

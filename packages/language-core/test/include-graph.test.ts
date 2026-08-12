@@ -82,4 +82,100 @@ describe("include graph", () => {
     expect(cancelled.cancelled).toBe(true);
     expect(cancelled.files.size).toBe(1);
   });
+
+  it("applies includes inline and snapshots inherited settings in alphabetic order", async () => {
+    const fs = fakeFileSystem({
+      "file:///root": "",
+      "file:///parts": ["20-compress", "10-weekly"],
+      "file:///parts/10-weekly": "weekly\n",
+      "file:///parts/20-compress": "compress\n",
+    });
+    const graph = await buildIncludeGraph(
+      "file:///root",
+      "daily\ninclude file:///parts\nrotate 4\n/var/log/a {\n  delaycompress\n}\n",
+      fs,
+    );
+    const weekly = graph.files.get("file:///parts/10-weekly");
+    const compress = graph.files.get("file:///parts/20-compress");
+    expect([...(weekly?.inheritedSettings.keys() ?? [])]).toEqual(["daily"]);
+    expect([...(compress?.inheritedSettings.keys() ?? [])]).toEqual(["daily", "weekly"]);
+    expect([...(graph.files.get("file:///root")?.effectiveSettings.keys() ?? [])]).toEqual([
+      "daily",
+      "weekly",
+      "compress",
+      "rotate",
+    ]);
+    expect([...(graph.rotations[0]?.settings.keys() ?? [])]).toEqual([
+      "daily",
+      "weekly",
+      "compress",
+      "rotate",
+      "delaycompress",
+    ]);
+    expect(graph.rotations[0]?.settings.get("weekly")?.uri).toBe("file:///parts/10-weekly");
+  });
+
+  it("implements taboo replacement and append semantics without reading ignored entries", async () => {
+    const reads: string[] = [];
+    const base = fakeFileSystem({
+      "file:///root": "",
+      "file:///parts": ["keep.bak", "drop.skip", "keep.conf"],
+      "file:///parts/keep.bak": "daily\n",
+      "file:///parts/drop.skip": "weekly\n",
+      "file:///parts/keep.conf": "monthly\n",
+    });
+    const fs: FileSystemProvider = {
+      ...base,
+      readFile(uri): Promise<string> {
+        reads.push(uri);
+        return base.readFile(uri);
+      },
+    };
+    const replaced = await buildIncludeGraph(
+      "file:///root",
+      "tabooext .skip\ninclude file:///parts\n",
+      fs,
+    );
+    expect([...replaced.files.keys()]).toEqual([
+      "file:///root",
+      "file:///parts/keep.bak",
+      "file:///parts/keep.conf",
+    ]);
+    expect(reads).not.toContain("file:///parts/drop.skip");
+
+    reads.length = 0;
+    const appended = await buildIncludeGraph(
+      "file:///root",
+      "tabooext + .skip\ninclude file:///parts\n",
+      fs,
+    );
+    expect([...appended.files.keys()]).toEqual(["file:///root", "file:///parts/keep.conf"]);
+    expect(reads).toEqual(["file:///parts/keep.conf"]);
+  });
+
+  it("bounds UTF-8 bytes, directory entries, and include depth", async () => {
+    const entries: Record<string, string | readonly string[]> = {
+      "file:///root": "",
+      "file:///parts": ["a", "b", "c"],
+      "file:///parts/a": "😀".repeat(8),
+      "file:///parts/b": "daily\n",
+      "file:///parts/c": "weekly\n",
+    };
+    for (let depth = 0; depth <= 17; depth += 1) {
+      entries[`file:///depth-${depth}`] =
+        depth === 17 ? "daily\n" : `include file:///depth-${depth + 1}\n`;
+    }
+    const fs = fakeFileSystem(entries);
+    const boundedEntries = await buildIncludeGraph("file:///root", "include file:///parts\n", fs, {
+      maxDirectoryEntries: 2,
+      maxFileBytes: 30,
+    });
+    expect(boundedEntries.diagnostics.map(({ code }) => code)).toEqual(["LR3007", "LR3005"]);
+    expect(boundedEntries.files.has("file:///parts/c")).toBe(false);
+
+    const deep = await buildIncludeGraph("file:///depth-0", "include file:///depth-1\n", fs);
+    expect(deep.files.has("file:///depth-16")).toBe(true);
+    expect(deep.files.has("file:///depth-17")).toBe(false);
+    expect(deep.diagnostics.at(-1)?.code).toBe("LR3003");
+  });
 });

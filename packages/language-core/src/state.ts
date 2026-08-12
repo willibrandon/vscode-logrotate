@@ -34,10 +34,24 @@ export function parseState(source: string, options: ValidationOptions = {}): Par
       break;
     }
     const content = source.slice(line.start, line.contentEnd);
-    if (content.trim() === "" || content.trimStart().startsWith("#")) {
+    if (content.trim() === "") {
       continue;
     }
     const decoded = decodeArguments(content);
+    if (decoded.diagnostics.length > 0) {
+      const malformed = decoded.diagnostics[0];
+      if (malformed !== undefined) {
+        diagnostics.push(
+          stateDiagnostic(
+            "LRS1006",
+            "The state record contains a malformed quoted or escaped value.",
+            line.start + malformed.start,
+            line.start + malformed.end,
+          ),
+        );
+      }
+      continue;
+    }
     const path = decoded.arguments[0];
     const timestamp = decoded.arguments[1];
     if (path === undefined || timestamp === undefined || decoded.arguments.length !== 2) {
@@ -83,7 +97,7 @@ export function parseState(source: string, options: ValidationOptions = {}): Par
       year === undefined ||
       month === undefined ||
       day === undefined ||
-      !validDateFields(month, day, hour, minute, second)
+      !validDateFields(year, month, day, hour, minute, second)
     ) {
       diagnostics.push(
         stateDiagnostic(
@@ -120,6 +134,7 @@ export function parseState(source: string, options: ValidationOptions = {}): Par
 }
 
 function validDateFields(
+  year: number,
   month: number,
   day: number,
   hour?: number,
@@ -127,9 +142,10 @@ function validDateFields(
   second?: number,
 ): boolean {
   return (
+    (year === 1900 || (year >= 1970 && year <= 2100)) &&
     month >= 1 &&
     month <= 12 &&
-    day >= 1 &&
+    day >= 0 &&
     day <= 31 &&
     (hour === undefined || (hour >= 0 && hour <= 23)) &&
     (minute === undefined || (minute >= 0 && minute <= 59)) &&

@@ -70,6 +70,17 @@ export const semanticMetadata: readonly SemanticDefinition[] = Object.freeze(
 );
 `;
 
+const generatedVersions = `${banner}import type { VersionDefinition } from "../types.js";
+
+export const latestVersion: string = ${JSON.stringify(versions.latest)};
+
+export const supportedVersions: readonly VersionDefinition[] = Object.freeze(${JSON.stringify(versions.supported, null, 2)});
+
+export const versionByNumber: ReadonlyMap<string, VersionDefinition> = new Map(
+  supportedVersions.map((version): readonly [string, VersionDefinition] => [version.version, version]),
+);
+`;
+
 const grammar = {
   $schema: "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   name: "Logrotate",
@@ -285,6 +296,7 @@ ${directives.map((directive) => `| [\`${directive.name}\`](${directive.documenta
 `;
 
 await emit("packages/language-core/src/generated/directives.ts", generatedDirectives);
+await emit("packages/language-core/src/generated/versions.ts", generatedVersions);
 await emit("syntaxes/logrotate.tmLanguage.json", json(grammar));
 await emit("syntaxes/logrotate-state.tmLanguage.json", json(stateGrammar));
 await emit("syntaxes/logrotate-markdown.tmLanguage.json", json(markdownGrammar));

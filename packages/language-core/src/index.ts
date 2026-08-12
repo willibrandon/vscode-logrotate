@@ -14,6 +14,12 @@ export { lex } from "./lexer.js";
 export { parse } from "./parser.js";
 export { SourceMap } from "./source-map.js";
 export { parseState } from "./state.js";
+export {
+  latestVersion,
+  resolveTargetVersion,
+  supportedVersions,
+  versionByNumber,
+} from "./version.js";
 export type {
   ArgumentDefinition,
   ArgumentKind,
@@ -22,6 +28,10 @@ export type {
   DirectiveScope,
   HoverDefinition,
   SemanticDefinition,
+  ResolvedTargetVersion,
+  TargetVersionDetection,
+  TargetVersionSetting,
+  VersionDefinition,
 } from "./types.js";
 export type {
   CoreDiagnostic,
@@ -48,9 +58,12 @@ export type {
 } from "./model.js";
 export type { FormatOptions } from "./formatter.js";
 export type {
+  EffectiveDirective,
+  EffectiveSettings,
   FileSystemProvider,
   IncludeFile,
   IncludeGraph,
   IncludeLimits,
   ResourceStat,
+  RotationSettingsSnapshot,
 } from "./include-graph.js";

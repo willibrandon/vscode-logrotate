@@ -1,6 +1,6 @@
 import { decodeArguments } from "./arguments.js";
 import { directiveByName } from "./registry.js";
-import { lex } from "./lexer.js";
+import { lexLines } from "./lexer.js";
 import type {
   CoreDiagnostic,
   DirectiveNode,
@@ -16,6 +16,7 @@ import type {
 } from "./model.js";
 import { SourceMap } from "./source-map.js";
 import type { DirectiveScope } from "./types.js";
+import { resolveTargetVersion } from "./version.js";
 
 interface ParseContext {
   readonly source: string;
@@ -43,9 +44,10 @@ export function parse(source: string, options: ValidationOptions = {}): ParsedDo
     source,
     start: 0,
     end: source.length,
-    tokens: lex(source),
+    tokens: lexLines(source, map.lines, options.cancelled),
     children,
     diagnostics: context.diagnostics.slice(0, maxProblems),
+    maxProblems,
     newline: detectNewline(source),
   };
 }
@@ -86,6 +88,7 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
       context.index += 1;
       continue;
     }
+    const candidate = /^\s*([A-Za-z]+)/u.exec(content);
     const key = /^\s*([A-Za-z]+)(?=\s|=|$)/u.exec(content);
     if (key !== null) {
       const name = key[1] ?? "";
@@ -95,6 +98,21 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
       }
       const directive = parseDirective(context, scope, name, key);
       nodes.push(name === "include" ? toInclude(directive) : directive);
+      context.index += 1;
+      continue;
+    }
+    if (candidate !== null) {
+      const name = candidate[1] ?? "";
+      const start = line.start + candidate.index + candidate[0].lastIndexOf(name);
+      addDiagnostic(context, {
+        code: "LR1010",
+        severity: "error",
+        message: `Directive “${name}” must be followed by whitespace or an equals sign.`,
+        source: "logrotate",
+        start,
+        end: start + name.length,
+      });
+      nodes.push(errorNode(context.source, line.start, line.end, "Malformed directive line."));
       context.index += 1;
       continue;
     }
@@ -129,7 +147,6 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
   const headerStart = firstLine.start;
   let headerEnd = firstLine.end;
   let openBrace: TextSpan | undefined;
-  const parts: string[] = [];
   while (context.index < context.lines.length) {
     const line = context.lines[context.index];
     if (line === undefined) {
@@ -137,11 +154,21 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
     }
     const content = context.source.slice(line.start, line.contentEnd);
     const brace = findUnquotedBrace(content);
-    const pathContent = brace >= 0 ? content.slice(0, brace) : content;
-    parts.push(pathContent);
     headerEnd = line.end;
     if (brace >= 0) {
       openBrace = { start: line.start + brace, end: line.start + brace + 1 };
+      const trailing = content.slice(brace + 1);
+      if (trailing.trim() !== "") {
+        const trailingStart = line.start + brace + 1 + trailing.search(/\S/u);
+        addDiagnostic(context, {
+          code: "LR1012",
+          severity: "error",
+          message: "Unexpected text after the opening brace.",
+          source: "logrotate",
+          start: trailingStart,
+          end: line.contentEnd,
+        });
+      }
       context.index += 1;
       break;
     }
@@ -154,13 +181,22 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
       break;
     }
   }
-  const joined = parts.join(" ");
-  const decoded = decodeArguments(joined);
+  const argumentEnd = openBrace?.start ?? headerEnd;
+  const projectedHeader = projectHeaderForArguments(context.source.slice(headerStart, argumentEnd));
+  const decoded = decodeArguments(projectedHeader);
   const paths = decoded.arguments.map((argument) => ({
     ...argument,
     start: headerStart + argument.start,
     end: headerStart + argument.end,
+    raw: context.source.slice(headerStart + argument.start, headerStart + argument.end),
   }));
+  for (const diagnostic of decoded.diagnostics) {
+    addDiagnostic(context, {
+      ...diagnostic,
+      start: headerStart + diagnostic.start,
+      end: headerStart + diagnostic.end,
+    });
+  }
   const header: PathHeaderNode = {
     kind: "path-header",
     start: headerStart,
@@ -185,6 +221,16 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
       "Rotation header has no opening brace.",
     );
   }
+  if (paths.length === 0) {
+    addDiagnostic(context, {
+      code: "LR1014",
+      severity: "error",
+      message: "A rotation block requires at least one log path or glob.",
+      source: "logrotate",
+      start: headerStart,
+      end: openBrace.start,
+    });
+  }
   const children = parseNodes(context, "block");
   const closingLine = context.lines[context.index];
   let closeBrace: TextSpan | undefined;
@@ -198,6 +244,18 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
         end: closingLine.start + closingOffset + 1,
       };
       end = closingLine.end;
+      const trailing = closingContent.slice(closingOffset + 1);
+      if (trailing.trim() !== "") {
+        const trailingStart = closingLine.start + closingOffset + 1 + trailing.search(/\S/u);
+        addDiagnostic(context, {
+          code: "LR1013",
+          severity: "error",
+          message: "Unexpected text after the closing brace.",
+          source: "logrotate",
+          start: trailingStart,
+          end: closingLine.contentEnd,
+        });
+      }
       context.index += 1;
     }
   }
@@ -227,6 +285,7 @@ function parseDirective(
   scope: DirectiveScope,
   name: string,
   match: RegExpExecArray,
+  matchedScriptTerminator?: boolean,
 ): DirectiveNode {
   const line = context.lines[context.index];
   if (line === undefined) {
@@ -241,16 +300,18 @@ function parseDirective(
   const definition = directiveByName.get(name);
   if (definition === undefined) {
     const lower = directiveByName.get(name.toLowerCase());
+    const suggestion = lower?.name ?? closestDirective(name);
     addDiagnostic(context, {
       code: lower === undefined ? "LR1001" : "LR1007",
       severity: "error",
       message:
         lower === undefined
-          ? `Unknown directive “${name}”.`
+          ? `Unknown directive “${name}”.${suggestion === undefined ? "" : ` Did you mean “${suggestion}”?`}`
           : `Directive names are lowercase; use “${lower.name}”.`,
       source: "logrotate",
       start: nameSpan.start,
       end: nameSpan.end,
+      ...(suggestion === undefined ? {} : { data: { suggestion } }),
     });
   } else if (!definition.scopes.includes(scope)) {
     addDiagnostic(context, {
@@ -270,6 +331,15 @@ function parseDirective(
       start: nameSpan.start,
       end: nameSpan.end,
       tags: ["deprecated", "unnecessary"],
+    });
+  } else if (name === "endscript" && !matchedScriptTerminator) {
+    addDiagnostic(context, {
+      code: "LR1011",
+      severity: "error",
+      message: "This endscript has no matching script directive.",
+      source: "logrotate",
+      start: nameSpan.start,
+      end: nameSpan.end,
     });
   }
   let argumentStart = nameLocalStart + name.length;
@@ -329,7 +399,7 @@ function parseScript(
     const endMatch = /^\s*(endscript)(?:\s*)$/u.exec(content);
     if (endMatch !== null) {
       bodyEnd = line.start;
-      terminator = parseDirective(context, "block", "endscript", endMatch);
+      terminator = parseDirective(context, "block", "endscript", endMatch, true);
       context.index += 1;
       break;
     }
@@ -438,48 +508,97 @@ function validateArguments(
       }
     }
   }
-  if (
-    (kind === "create" || kind === "createolddir") &&
-    /^[0-9]+$/u.test(first.value) &&
-    !/^[0-7]{3,4}$/u.test(first.value)
-  ) {
+  if ((kind === "create" || kind === "createolddir") && !/^[0-7]{3,4}$/u.test(first.value)) {
     argumentError(context, "LR1106", "File modes must be three or four octal digits.", first);
   }
+  if (
+    ["path", "command", "extension", "mail-address", "date-format"].includes(kind) &&
+    first.value === ""
+  ) {
+    argumentError(context, "LR1108", "This argument cannot be empty.", first);
+  }
   if (kind === "date-format") {
+    const target = resolveTargetVersion(context.options.targetVersion ?? "latest", {
+      allowed: context.options.allowVersionDetection === true,
+      ...(context.options.detectedVersion === undefined
+        ? {}
+        : { version: context.options.detectedVersion }),
+    });
+    const supported = target.definition?.dateFormatConversions;
+    if (supported === undefined) {
+      return;
+    }
     const unsupported = [...first.value.matchAll(/%./gu)].find(
-      (match) =>
-        ![
-          "%Y",
-          "%m",
-          "%d",
-          "%H",
-          "%M",
-          "%S",
-          "%G",
-          "%V",
-          "%U",
-          "%W",
-          "%u",
-          "%w",
-          "%y",
-          "%g",
-          "%j",
-          "%s",
-          "%z",
-          "%%",
-        ].includes(match[0]),
+      (match) => match[0] !== "%%" && !supported.includes(match[0]),
     );
     if (unsupported?.index !== undefined) {
       addDiagnostic(context, {
         code: "LR1107",
         severity: "error",
-        message: `Date conversion “${unsupported[0]}” is not supported by target logrotate 3.22.`,
+        message: `Date conversion “${unsupported[0]}” is not supported by target logrotate ${target.version}.`,
         source: "logrotate",
         start: first.start + unsupported.index,
         end: first.start + unsupported.index + unsupported[0].length,
       });
     }
   }
+}
+
+function projectHeaderForArguments(header: string): string {
+  const characters = header.split("");
+  let lineStart = 0;
+  for (let index = 0; index <= characters.length; index += 1) {
+    const character = characters[index];
+    if (character !== "\r" && character !== "\n" && index !== characters.length) {
+      continue;
+    }
+    const line = characters.slice(lineStart, index).join("");
+    if (line.trimStart().startsWith("#")) {
+      for (let cursor = lineStart; cursor < index; cursor += 1) {
+        characters[cursor] = " ";
+      }
+    }
+    if (index < characters.length) {
+      characters[index] = " ";
+      if (character === "\r" && characters[index + 1] === "\n") {
+        index += 1;
+        characters[index] = " ";
+      }
+    }
+    lineStart = index + 1;
+  }
+  return characters.join("");
+}
+
+function closestDirective(candidate: string): string | undefined {
+  const normalized = candidate.toLowerCase();
+  const ranked = [...directiveByName.keys()]
+    .map((name) => ({ name, distance: editDistance(normalized, name) }))
+    .sort((left, right) => left.distance - right.distance || left.name.localeCompare(right.name));
+  const first = ranked[0];
+  const second = ranked[1];
+  const threshold = Math.max(1, Math.floor(normalized.length / 3));
+  return first !== undefined &&
+    first.distance <= threshold &&
+    (second === undefined || first.distance < second.distance)
+    ? first.name
+    : undefined;
+}
+
+function editDistance(left: string, right: string): number {
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current[rightIndex] = Math.min(
+        (current[rightIndex - 1] ?? 0) + 1,
+        (previous[rightIndex] ?? 0) + 1,
+        (previous[rightIndex - 1] ?? 0) + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return previous[right.length] ?? Math.max(left.length, right.length);
 }
 
 function argumentError(context: ParseContext, code: string, message: string, span: TextSpan): void {

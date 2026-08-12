@@ -249,6 +249,7 @@
     "test:lsp": "vitest run packages/language-server/test",
     "test:client": "vitest run packages/vscode-client/test",
     "test:grammar": "vitest run test/grammar",
+    "test:performance": "vitest run --config vitest.performance.config.ts",
     "test:package": "vitest run test/package",
     "test:integration": "vscode-test",
     "test:web": "vscode-test-web --config .vscode-test-web.mjs",
@@ -258,7 +259,7 @@
     "vscode:prepublish": "npm run build",
     "package": "npm run build && vsce package --no-dependencies --out dist/logrotate.vsix",
     "package:list": "vsce ls --no-dependencies",
-    "verify": "npm run check:generated && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run check:bundles && npm run test:package && npm run audit"
+    "verify": "npm run check:generated && npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:performance && npm run build && npm run check:bundles && npm run test:package && npm run audit"
   },
   "devDependencies": {
     "@cyclonedx/cyclonedx-npm": "6.0.1",

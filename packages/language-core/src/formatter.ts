@@ -1,5 +1,5 @@
 import { parse } from "./parser.js";
-import type { DocumentNode, ParsedDocument, TextEdit } from "./model.js";
+import type { DocumentNode, ParsedDocument, TextEdit, TextSpan } from "./model.js";
 import { SourceMap } from "./source-map.js";
 
 export interface FormatOptions {
@@ -15,10 +15,11 @@ export function format(source: string, options: FormatOptions = {}): readonly Te
   }
   const editableLines = collectEditableLines(document, options.range);
   const map = new SourceMap(source);
+  const lineByStart = new Map(map.lines.map((line) => [line.start, line] as const));
   const edits: TextEdit[] = [];
   const indentation = options.insertSpaces === false ? "\t" : " ".repeat(options.tabSize ?? 2);
   for (const item of editableLines) {
-    const line = map.lines.find(({ start }) => start === item.start);
+    const line = lineByStart.get(item.start);
     if (line === undefined) {
       continue;
     }
@@ -32,7 +33,7 @@ export function format(source: string, options: FormatOptions = {}): readonly Te
       desired = normalizeDirectiveSpacing(desired);
     }
     if (desired !== original) {
-      edits.push({ start: line.start, end: line.contentEnd, newText: desired });
+      edits.push(minimalEdit(line.start, original, desired));
     }
   }
   return edits;
@@ -59,13 +60,19 @@ function collectEditableLines(
   const lines: EditableLine[] = [];
   const visit = (nodes: readonly DocumentNode[], depth: number): void => {
     for (const node of nodes) {
-      if (!withinRange(node, range)) {
+      if (!overlapsRange(node, range)) {
         continue;
       }
       if (node.kind === "rotation-block") {
-        lines.push({ start: node.header.start, depth: Math.max(0, depth - 1), node: node.header });
+        if (withinRange(node.header, range)) {
+          lines.push({
+            start: node.header.start,
+            depth: Math.max(0, depth - 1),
+            node: node.header,
+          });
+        }
         visit(node.children, depth + 1);
-        if (node.closeBrace !== undefined) {
+        if (node.closeBrace !== undefined && withinRange(node.closeBrace, range)) {
           lines.push({
             start: lineStart(document.source, node.closeBrace.start),
             depth: Math.max(0, depth - 1),
@@ -73,11 +80,16 @@ function collectEditableLines(
           });
         }
       } else if (node.kind === "script") {
-        lines.push({ start: node.starter.start, depth, node: node.starter });
-        if (node.terminator !== undefined) {
+        if (withinRange(node.starter, range)) {
+          lines.push({ start: node.starter.start, depth, node: node.starter });
+        }
+        if (node.terminator !== undefined && withinRange(node.terminator, range)) {
           lines.push({ start: node.terminator.start, depth, node: node.terminator });
         }
-      } else if (node.kind === "directive" || node.kind === "include") {
+      } else if (
+        (node.kind === "directive" || node.kind === "include") &&
+        withinRange(node, range)
+      ) {
         lines.push({ start: node.start, depth, node });
       }
     }
@@ -86,8 +98,12 @@ function collectEditableLines(
   return lines;
 }
 
-function withinRange(node: DocumentNode, range: FormatOptions["range"]): boolean {
+function withinRange(node: TextSpan, range: FormatOptions["range"]): boolean {
   return range === undefined || (node.start >= range.start && node.end <= range.end);
+}
+
+function overlapsRange(node: TextSpan, range: FormatOptions["range"]): boolean {
+  return range === undefined || (node.start < range.end && node.end > range.start);
 }
 
 function lineStart(source: string, offset: number): number {
@@ -101,4 +117,28 @@ function normalizeDirectiveSpacing(value: string): string {
   return match === null
     ? value
     : `${match[1] ?? ""}${match[2] ?? ""}${(match[3] ?? "") === "" ? "" : ` ${match[3]}`}`;
+}
+
+function minimalEdit(lineStart: number, original: string, desired: string): TextEdit {
+  let prefix = 0;
+  while (
+    prefix < original.length &&
+    prefix < desired.length &&
+    original[prefix] === desired[prefix]
+  ) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  while (
+    suffix < original.length - prefix &&
+    suffix < desired.length - prefix &&
+    original[original.length - suffix - 1] === desired[desired.length - suffix - 1]
+  ) {
+    suffix += 1;
+  }
+  return {
+    start: lineStart + prefix,
+    end: lineStart + original.length - suffix,
+    newText: desired.slice(prefix, desired.length - suffix),
+  };
 }

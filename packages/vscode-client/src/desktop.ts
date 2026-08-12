@@ -24,7 +24,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerCommonCommands(context, { client, output });
   registerFileSystemBridge({ client, output });
   const diagnostics = vscode.languages.createDiagnosticCollection("logrotate-installed");
+  const activeValidations = new Map<string, AbortController>();
   context.subscriptions.push(diagnostics);
+  context.subscriptions.push({
+    dispose(): void {
+      for (const controller of activeValidations.values()) controller.abort();
+      activeValidations.clear();
+    },
+  });
   const validate = async (document: vscode.TextDocument, explicit: boolean): Promise<void> => {
     const unavailable = externalValidationUnavailable({
       isDesktop: true,
@@ -40,19 +47,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const executable = vscode.workspace
       .getConfiguration("logrotate", document.uri)
       .get<string>("executablePath", "logrotate");
+    activeValidations.get(document.uri.toString())?.abort();
+    const controller = new AbortController();
+    activeValidations.set(document.uri.toString(), controller);
     try {
       const result = await validateWithInstalledLogrotate(
         executable,
         document.uri.fsPath,
         new NodeProcessHost(),
+        undefined,
+        { signal: controller.signal, isTrusted: () => vscode.workspace.isTrusted },
       );
+      if (result.cancelled) return;
       diagnostics.set(document.uri, diagnosticsFromOutput(document, result));
     } catch (error) {
       diagnostics.delete(document.uri);
-      if (explicit) {
+      if (explicit && !controller.signal.aborted) {
         await vscode.window.showErrorMessage(
-          `Unable to run installed logrotate: ${error instanceof Error ? error.message : String(error)}`,
+          `Unable to run installed logrotate: ${safeMessage(error instanceof Error ? error.message : String(error))}`,
         );
+      }
+    } finally {
+      if (activeValidations.get(document.uri.toString()) === controller) {
+        activeValidations.delete(document.uri.toString());
       }
     }
   };
@@ -76,6 +93,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         .get<string>("externalValidation.mode", "off");
       if (mode === "onSave") await validate(document, false);
     }),
+    vscode.workspace.onDidCloseTextDocument((document): void => {
+      activeValidations.get(document.uri.toString())?.abort();
+      activeValidations.delete(document.uri.toString());
+      diagnostics.delete(document.uri);
+    }),
   );
   await client.start();
 }
@@ -98,7 +120,9 @@ function diagnosticsFromOutput(
     ? "Installed logrotate validation timed out."
     : result.truncated
       ? "Installed logrotate validation exceeded its output limit."
-      : (firstLine ?? `Installed logrotate exited with code ${result.exitCode ?? "unknown"}.`);
+      : safeMessage(
+          firstLine ?? `Installed logrotate exited with code ${result.exitCode ?? "unknown"}.`,
+        );
   const diagnostic = new vscode.Diagnostic(
     new vscode.Range(0, 0, 0, Math.max(1, document.lineAt(0).text.length)),
     `[logrotate ${result.version} on this host] ${message}`,
@@ -107,4 +131,20 @@ function diagnosticsFromOutput(
   diagnostic.source = "logrotate-installed";
   diagnostic.code = "LRHOST";
   return [diagnostic];
+}
+
+function safeMessage(value: string): string {
+  let sanitized = "";
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    sanitized +=
+      (code >= 0 && code <= 8) ||
+      code === 11 ||
+      code === 12 ||
+      (code >= 14 && code <= 31) ||
+      code === 127
+        ? "�"
+        : character;
+  }
+  return sanitized.length <= 500 ? sanitized : `${sanitized.slice(0, 500)}…`;
 }

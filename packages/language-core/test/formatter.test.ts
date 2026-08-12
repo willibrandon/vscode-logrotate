@@ -35,4 +35,17 @@ describe("formatter", () => {
     const source = "/var/log/a {\nsize 10M\n}\n";
     expect(format(source, { range: { start: 16, end: 18 } })).toEqual([]);
   });
+
+  it("range formatting accepts a complete directive node nested in a stanza", () => {
+    const source = "/var/log/a {\nsize= 10M\n}\n";
+    const directive = rotationBlocks(parse(source))[0]?.children[0];
+    expect(directive).toBeDefined();
+    const edits = format(source, {
+      insertSpaces: true,
+      tabSize: 2,
+      range: { start: directive?.start ?? 0, end: directive?.end ?? 0 },
+    });
+    expect(applyEdits(source, edits)).toBe("/var/log/a {\n  size 10M\n}\n");
+    expect(edits.every(({ end, start }) => end - start < "size= 10M".length)).toBe(true);
+  });
 });

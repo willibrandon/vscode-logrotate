@@ -1,6 +1,8 @@
 import {
   analyze,
+  buildIncludeGraph,
   completionTable,
+  decodeArguments,
   directiveByName,
   format,
   parse,
@@ -11,9 +13,11 @@ import type {
   CoreDiagnostic,
   DirectiveNode,
   DocumentNode,
+  FileSystemProvider,
   ParsedDocument,
   TextSpan,
 } from "@logrotate/language-core";
+import { URI, Utils } from "vscode-uri";
 import {
   CodeActionKind,
   CompletionItemKind,
@@ -44,12 +48,19 @@ import type {
   SelectionRange,
   SemanticTokens,
   SignatureHelp,
+  SymbolInformation,
   TextEdit,
 } from "vscode-languageserver";
 import { TextDocument } from "vscode-languageserver-textdocument";
+import { readDirectoryRequest, readFileRequest, statRequest } from "./protocol.js";
 
 const tokenTypes = ["keyword", "string", "number", "comment", "parameter"] as const;
 const tokenModifiers = ["deprecated"] as const;
+
+export interface TimerHost {
+  setTimeout(callback: () => void, milliseconds: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
 
 export interface ServerSettings {
   readonly validation: {
@@ -64,9 +75,37 @@ const defaultSettings: ServerSettings = {
   targetVersion: "latest",
 };
 
-export function startLanguageServer(connection: Connection): void {
+export function startLanguageServer(connection: Connection, timers: TimerHost): void {
   const documents = new TextDocuments(TextDocument);
   let settings: ServerSettings = defaultSettings;
+  const pendingDiagnostics = new Map<string, unknown>();
+  const loadedIncludes = new Map<string, ReadonlySet<string>>();
+  const fileSystem = connectionFileSystem(connection, documents);
+
+  const cancelPending = (uri: string): void => {
+    const pending = pendingDiagnostics.get(uri);
+    if (pending !== undefined) {
+      timers.clearTimeout(pending);
+      pendingDiagnostics.delete(uri);
+    }
+  };
+  const scheduleDiagnostics = (document: TextDocument): void => {
+    cancelPending(document.uri);
+    const version = document.version;
+    const handle = timers.setTimeout((): void => {
+      pendingDiagnostics.delete(document.uri);
+      if (documents.get(document.uri)?.version !== version) return;
+      void publishDiagnostics(
+        connection,
+        documents,
+        document,
+        settings,
+        fileSystem,
+        loadedIncludes,
+      );
+    }, 150);
+    pendingDiagnostics.set(document.uri, handle);
+  };
 
   connection.onInitialize((): InitializeResult => ({
     capabilities: {
@@ -75,6 +114,7 @@ export function startLanguageServer(connection: Connection): void {
       hoverProvider: true,
       signatureHelpProvider: { triggerCharacters: [" "] },
       documentSymbolProvider: true,
+      workspaceSymbolProvider: true,
       foldingRangeProvider: true,
       selectionRangeProvider: true,
       documentLinkProvider: { resolveProvider: false },
@@ -102,21 +142,29 @@ export function startLanguageServer(connection: Connection): void {
       targetVersion: candidate?.targetVersion ?? defaultSettings.targetVersion,
     };
     for (const document of documents.all()) {
-      publishDiagnostics(connection, document, settings);
+      scheduleDiagnostics(document);
     }
   });
 
-  documents.onDidOpen(({ document }): void => publishDiagnostics(connection, document, settings));
-  documents.onDidChangeContent(({ document }): void =>
-    publishDiagnostics(connection, document, settings),
-  );
+  documents.onDidOpen(({ document }): void => scheduleDiagnostics(document));
+  documents.onDidChangeContent(({ document }): void => scheduleDiagnostics(document));
   documents.onDidClose(({ document }): void => {
+    cancelPending(document.uri);
     void connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
   });
 
-  connection.onCompletion((params): CompletionItem[] => {
+  connection.onShutdown((): void => {
+    for (const pending of pendingDiagnostics.values()) timers.clearTimeout(pending);
+    pendingDiagnostics.clear();
+  });
+
+  connection.onCompletion(async (params, token): Promise<CompletionItem[]> => {
     const document = documents.get(params.textDocument.uri);
-    if (document === undefined || document.languageId === "logrotate-state") {
+    if (
+      document === undefined ||
+      document.languageId === "logrotate-state" ||
+      token.isCancellationRequested
+    ) {
       return [];
     }
     const line = document.getText({
@@ -127,6 +175,28 @@ export function startLanguageServer(connection: Connection): void {
       return line.trim() === "" || "endscript".startsWith(line.trim())
         ? [{ label: "endscript", kind: CompletionItemKind.Keyword, insertText: "endscript" }]
         : [];
+    }
+    const directiveLine = /^\s*([a-z]+)(?:\s*=\s*|\s+)(.*)$/u.exec(line);
+    if (directiveLine !== null) {
+      const name = directiveLine[1] ?? "";
+      const argument = directiveLine[2] ?? "";
+      if (name === "include") {
+        return completePath(
+          document.uri,
+          argument,
+          fileSystem,
+          () => token.isCancellationRequested,
+        );
+      }
+      return argumentCompletions(name);
+    }
+    if (/^\s*(?:\/|~\/)/u.test(line)) {
+      return completePath(
+        document.uri,
+        line.trimStart(),
+        fileSystem,
+        () => token.isCancellationRequested,
+      );
     }
     const scope = scopeAt(parse(document.getText()), document.offsetAt(params.position));
     return completionTable
@@ -161,11 +231,15 @@ export function startLanguageServer(connection: Connection): void {
       return null;
     }
     const status = definition.deprecated ? "\n\n**Deprecated and ignored.**" : "";
+    const interactions =
+      definition.interactions.length === 0
+        ? ""
+        : `\n\nRelated: ${definition.interactions.map((name) => `\`${name}\``).join(", ")}.`;
     return {
       range: word.range,
       contents: {
         kind: MarkupKind.Markdown,
-        value: `**${definition.name}** · ${definition.arguments.kind}\n\n${definition.summary}${status}\n\nValid in: ${definition.scopes.join(", ")} · [Upstream documentation](${definition.documentation})`,
+        value: `**${definition.name}** · ${definition.arguments.kind}\n\n${definition.summary}${status}${interactions}\n\nValid in: ${definition.scopes.join(", ")} · Since: ${definition.since} · Target: ${settings.targetVersion} · [Upstream documentation](${definition.documentation})`,
       },
     };
   });
@@ -190,8 +264,12 @@ export function startLanguageServer(connection: Connection): void {
     };
     const name = match[1] ?? "";
     const parameters = labels[name] ?? [];
+    const argumentSource = match[2] ?? "";
+    const decoded = decodeArguments(argumentSource);
     const activeParameter = Math.min(
-      Math.max(0, (match[2] ?? "").trim().split(/\s+/u).length - 1),
+      /\s$/u.test(argumentSource)
+        ? decoded.arguments.length
+        : Math.max(0, decoded.arguments.length - 1),
       parameters.length - 1,
     );
     return {
@@ -213,20 +291,56 @@ export function startLanguageServer(connection: Connection): void {
       return [];
     }
     const parsed = parse(document.getText());
-    return rotationBlocks(parsed).map((block): DocumentSymbol => ({
-      name: block.header.paths.map(({ value }) => value).join(" ") || "Rotation block",
-      kind: SymbolKind.Object,
-      range: range(document, block),
-      selectionRange: range(document, block.header),
-      children: block.children
-        .filter((node) => node.kind === "script")
-        .map((script): DocumentSymbol => ({
-          name: script.starter.name,
-          kind: SymbolKind.Function,
-          range: range(document, script),
-          selectionRange: range(document, script.starter.nameSpan),
-        })),
-    }));
+    return parsed.children.flatMap((node): readonly DocumentSymbol[] => {
+      if (node.kind === "include") {
+        return [
+          {
+            name: `include ${node.target?.value ?? ""}`.trimEnd(),
+            kind: SymbolKind.File,
+            range: range(document, node),
+            selectionRange: range(document, node.directive.nameSpan),
+          },
+        ];
+      }
+      if (node.kind !== "rotation-block") return [];
+      return [
+        {
+          name: node.header.paths.map(({ value }) => value).join(" ") || "Rotation block",
+          kind: SymbolKind.Object,
+          range: range(document, node),
+          selectionRange: range(document, node.header),
+          children: node.children
+            .filter((child) => child.kind === "script")
+            .map((script): DocumentSymbol => ({
+              name: script.starter.name,
+              kind: SymbolKind.Function,
+              range: range(document, script),
+              selectionRange: range(document, script.starter.nameSpan),
+            })),
+        },
+      ];
+    });
+  });
+
+  connection.onWorkspaceSymbol((params): SymbolInformation[] => {
+    const query = params.query.toLowerCase();
+    return documents.all().flatMap((document): readonly SymbolInformation[] => {
+      if (document.languageId !== "logrotate") return [];
+      return rotationBlocks(parse(document.getText())).flatMap(
+        (block): readonly SymbolInformation[] => {
+          const name = block.header.paths.map(({ value }) => value).join(" ") || "Rotation block";
+          return query === "" || name.toLowerCase().includes(query)
+            ? [
+                {
+                  name,
+                  kind: SymbolKind.Object,
+                  location: { uri: document.uri, range: range(document, block.header) },
+                },
+              ]
+            : [];
+        },
+      );
+    });
   });
 
   connection.onFoldingRanges((params): FoldingRange[] => {
@@ -236,7 +350,7 @@ export function startLanguageServer(connection: Connection): void {
     }
     const result: FoldingRange[] = [];
     walk(parse(document.getText()).children, (node): void => {
-      if (node.kind === "rotation-block" || node.kind === "script" || node.kind === "path-header") {
+      if (node.kind === "rotation-block" || node.kind === "script") {
         const nodeRange = range(document, node);
         if (nodeRange.end.line > nodeRange.start.line) {
           result.push({
@@ -244,6 +358,12 @@ export function startLanguageServer(connection: Connection): void {
             endLine: nodeRange.end.line,
             ...(node.kind === "script" ? { kind: FoldingRangeKind.Region } : {}),
           });
+        }
+        if (node.kind === "rotation-block") {
+          const headerRange = range(document, node.header);
+          if (headerRange.end.line > headerRange.start.line) {
+            result.push({ startLine: headerRange.start.line, endLine: headerRange.end.line });
+          }
         }
       }
     });
@@ -263,7 +383,8 @@ export function startLanguageServer(connection: Connection): void {
       for (const node of containing) {
         parent = { range: range(document, node), parent };
       }
-      return { range: { start: position, end: position }, parent };
+      const token = parsed.tokens.find(({ start, end }) => start <= offset && offset <= end);
+      return token === undefined ? parent : { range: range(document, token), parent };
     });
   });
 
@@ -277,6 +398,7 @@ export function startLanguageServer(connection: Connection): void {
       if (node.kind === "include" && node.target !== undefined) {
         links.push({
           range: range(document, node.target),
+          target: fileSystem.resolve(document.uri, node.target.value),
           tooltip: "Open included logrotate resource",
         });
       }
@@ -291,6 +413,15 @@ export function startLanguageServer(connection: Connection): void {
     }
     const offset = document.offsetAt(params.position);
     const parsed = parse(document.getText());
+    const selectedInclude = includeAt(parsed.children, offset);
+    if (selectedInclude?.target !== undefined) {
+      return [
+        {
+          uri: fileSystem.resolve(document.uri, selectedInclude.target.value),
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+        },
+      ];
+    }
     const selected = directiveAt(parsed.children, offset);
     if (selected === undefined) {
       return [];
@@ -313,12 +444,14 @@ export function startLanguageServer(connection: Connection): void {
     if (selected === undefined) {
       return [];
     }
-    return allDirectives(parse(document.getText()).children)
-      .filter(({ name }) => name === selected.name)
-      .map((directive): Location => ({
-        uri: document.uri,
-        range: range(document, directive.nameSpan),
-      }));
+    return documents.all().flatMap((loaded): readonly Location[] =>
+      allDirectives(parse(loaded.getText()).children)
+        .filter(({ name }) => name === selected.name)
+        .map((directive): Location => ({
+          uri: loaded.uri,
+          range: range(loaded, directive.nameSpan),
+        })),
+    );
   });
 
   connection.onDocumentHighlight((params): DocumentHighlight[] => {
@@ -370,7 +503,8 @@ export function startLanguageServer(connection: Connection): void {
     if (document === undefined || document.languageId === "logrotate-state") {
       return builder.build();
     }
-    for (const directive of allDirectives(parse(document.getText()).children)) {
+    const parsed = parse(document.getText());
+    for (const directive of allDirectives(parsed.children)) {
       const start = document.positionAt(directive.nameSpan.start);
       builder.push(
         start.line,
@@ -379,6 +513,29 @@ export function startLanguageServer(connection: Connection): void {
         0,
         directive.definition?.deprecated === true ? 1 : 0,
       );
+      directive.arguments.forEach((argument, index): void => {
+        const tokenType = semanticArgumentType(directive, index);
+        if (tokenType === undefined || argument.end <= argument.start) return;
+        const argumentStart = document.positionAt(argument.start);
+        builder.push(
+          argumentStart.line,
+          argumentStart.character,
+          argument.end - argument.start,
+          tokenType,
+          0,
+        );
+      });
+    }
+    for (const block of rotationBlocks(parsed)) {
+      for (const path of block.header.paths) {
+        const start = document.positionAt(path.start);
+        builder.push(start.line, start.character, path.end - path.start, 1, 0);
+      }
+    }
+    for (const token of parsed.tokens) {
+      if (token.kind !== "comment") continue;
+      const start = document.positionAt(token.start);
+      builder.push(start.line, start.character, token.end - token.start, 3, 0);
     }
     return builder.build();
   });
@@ -389,15 +546,54 @@ export function startLanguageServer(connection: Connection): void {
       return [];
     }
     return params.context.diagnostics.flatMap((diagnostic): readonly CodeAction[] => {
-      if (diagnostic.code === "LR1007") {
-        const lower = document.getText(diagnostic.range).toLowerCase();
+      if (diagnostic.code === "LR1001" || diagnostic.code === "LR1007") {
+        const suggestion =
+          diagnostic.code === "LR1007"
+            ? document.getText(diagnostic.range).toLowerCase()
+            : diagnosticSuggestion(diagnostic.data);
+        if (suggestion === undefined) return [];
         return [
           {
-            title: `Replace with “${lower}”`,
+            title: `Replace with “${suggestion}”`,
             kind: CodeActionKind.QuickFix,
             isPreferred: true,
             diagnostics: [diagnostic],
-            edit: { changes: { [document.uri]: [{ range: diagnostic.range, newText: lower }] } },
+            edit: {
+              changes: { [document.uri]: [{ range: diagnostic.range, newText: suggestion }] },
+            },
+          },
+        ];
+      }
+      const prerequisite: Readonly<Record<string, string>> = {
+        LR2002: "compress",
+        LR2003: "dateext",
+        LR2005: "shred",
+      };
+      const prerequisiteName =
+        typeof diagnostic.code === "string" ? prerequisite[diagnostic.code] : undefined;
+      if (prerequisiteName !== undefined) {
+        const line = document.getText({
+          start: { line: diagnostic.range.start.line, character: 0 },
+          end: diagnostic.range.start,
+        });
+        const indentation = /^\s*/u.exec(line)?.[0] ?? "";
+        const start = { line: diagnostic.range.start.line, character: 0 };
+        return [
+          {
+            title: `Add prerequisite “${prerequisiteName}”`,
+            kind: CodeActionKind.QuickFix,
+            isPreferred: true,
+            diagnostics: [diagnostic],
+            edit: {
+              changes: {
+                [document.uri]: [
+                  {
+                    range: { start, end: start },
+                    newText: `${indentation}${prerequisiteName}${detectNewline(document.getText())}`,
+                  },
+                ],
+              },
+            },
           },
         ];
       }
@@ -451,31 +647,88 @@ export function startLanguageServer(connection: Connection): void {
   connection.listen();
 }
 
-function publishDiagnostics(
+async function publishDiagnostics(
   connection: Connection,
+  documents: TextDocuments<TextDocument>,
   document: TextDocument,
   settings: ServerSettings,
-): void {
+  fileSystem: FileSystemProvider,
+  loadedIncludes: Map<string, ReadonlySet<string>>,
+): Promise<void> {
   if (!settings.validation.enable) {
-    void connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+    await connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
+    await clearRemovedIncludes(connection, document.uri, new Set(), loadedIncludes);
     return;
   }
-  const core =
-    document.languageId === "logrotate-state"
-      ? parseState(document.getText(), { maxProblems: settings.validation.maxProblems }).diagnostics
-      : analyze(
-          parse(document.getText(), {
-            maxProblems: settings.validation.maxProblems,
-            targetVersion: settings.targetVersion,
-          }),
-        );
-  void connection.sendDiagnostics({
-    uri: document.uri,
-    version: document.version,
-    diagnostics: core
-      .slice(0, settings.validation.maxProblems)
-      .map((item): Diagnostic => toDiagnostic(document, item)),
-  });
+  if (document.languageId === "logrotate-state") {
+    const core = parseState(document.getText(), {
+      maxProblems: settings.validation.maxProblems,
+    }).diagnostics;
+    await connection.sendDiagnostics({
+      uri: document.uri,
+      version: document.version,
+      diagnostics: core.map((item): Diagnostic => toDiagnostic(document, item)),
+    });
+    return;
+  }
+
+  const version = document.version;
+  const graph = await buildIncludeGraph(
+    document.uri,
+    document.getText(),
+    fileSystem,
+    {},
+    () => documents.get(document.uri)?.version !== version,
+  );
+  if (graph.cancelled || documents.get(document.uri)?.version !== version) return;
+
+  const currentIncludes = new Set<string>();
+  for (const [uri, included] of graph.files) {
+    if (uri !== document.uri) currentIncludes.add(uri);
+    const open = documents.get(uri);
+    const diagnosticDocument =
+      open ?? TextDocument.create(uri, "logrotate", 0, included.document.source);
+    const parsed = parse(diagnosticDocument.getText(), {
+      maxProblems: settings.validation.maxProblems,
+      targetVersion: settings.targetVersion,
+    });
+    const core = [
+      ...analyze(parsed),
+      ...graph.diagnostics.filter(({ resource }) => resource === uri),
+    ].slice(0, settings.validation.maxProblems);
+    await connection.sendDiagnostics({
+      uri,
+      ...(open === undefined ? {} : { version: open.version }),
+      diagnostics: core.map((item): Diagnostic => toDiagnostic(diagnosticDocument, item)),
+    });
+  }
+  await clearRemovedIncludes(connection, document.uri, currentIncludes, loadedIncludes);
+  loadedIncludes.set(document.uri, currentIncludes);
+}
+
+async function clearRemovedIncludes(
+  connection: Connection,
+  rootUri: string,
+  current: ReadonlySet<string>,
+  loadedIncludes: Map<string, ReadonlySet<string>>,
+): Promise<void> {
+  const previous = loadedIncludes.get(rootUri) ?? new Set<string>();
+  loadedIncludes.set(rootUri, current);
+  for (const uri of previous) {
+    if (current.has(uri) || loadedByAnotherRoot(uri, rootUri, loadedIncludes)) continue;
+    await connection.sendDiagnostics({ uri, diagnostics: [] });
+  }
+}
+
+function loadedByAnotherRoot(
+  uri: string,
+  rootUri: string,
+  loadedIncludes: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  for (const [candidateRoot, resources] of loadedIncludes) {
+    if (candidateRoot !== rootUri && resources.has(uri)) return true;
+  }
+  return false;
 }
 
 function toDiagnostic(document: TextDocument, diagnostic: CoreDiagnostic): Diagnostic {
@@ -491,6 +744,7 @@ function toDiagnostic(document: TextDocument, diagnostic: CoreDiagnostic): Diagn
     code: diagnostic.code,
     source: diagnostic.source,
     message: diagnostic.message,
+    ...(diagnostic.data === undefined ? {} : { data: diagnostic.data }),
     ...(diagnostic.tags === undefined
       ? {}
       : {
@@ -563,13 +817,31 @@ function directiveAt(nodes: readonly DocumentNode[], offset: number): DirectiveN
   );
 }
 
+function includeAt(
+  nodes: readonly DocumentNode[],
+  offset: number,
+): Extract<DocumentNode, { readonly kind: "include" }> | undefined {
+  let result: Extract<DocumentNode, { readonly kind: "include" }> | undefined;
+  walk(nodes, (node): void => {
+    if (
+      result === undefined &&
+      node.kind === "include" &&
+      node.start <= offset &&
+      offset <= node.end
+    ) {
+      result = node;
+    }
+  });
+  return result;
+}
+
 function containingNodes(nodes: readonly DocumentNode[], offset: number): readonly DocumentNode[] {
   const result: DocumentNode[] = [];
   for (const node of nodes) {
     if (node.start <= offset && offset <= node.end) {
-      result.unshift(node);
+      result.push(node);
       if (node.kind === "rotation-block") {
-        result.unshift(...containingNodes(node.children, offset));
+        result.push(...containingNodes(node.children, offset));
       }
     }
   }
@@ -592,6 +864,132 @@ function scopeAt(document: ParsedDocument, offset: number): "global" | "block" {
     : "global";
 }
 
+function semanticArgumentType(directive: DirectiveNode, index: number): number | undefined {
+  const kind = directive.definition?.arguments.kind;
+  if (
+    kind === "integer" ||
+    kind === "nonnegative-integer" ||
+    kind === "positive-integer" ||
+    kind === "weekday" ||
+    kind === "monthday" ||
+    kind === "size" ||
+    ((kind === "create" || kind === "createolddir") && index === 0)
+  ) {
+    return 2;
+  }
+  if (kind === "user-group" || ((kind === "create" || kind === "createolddir") && index > 0)) {
+    return 4;
+  }
+  if (
+    kind === "path" ||
+    kind === "command" ||
+    kind === "extension" ||
+    kind === "remainder" ||
+    kind === "mail-address" ||
+    kind === "date-format" ||
+    kind === "taboo-list"
+  ) {
+    return 1;
+  }
+  return undefined;
+}
+
+function argumentCompletions(name: string): CompletionItem[] {
+  const kind = directiveByName.get(name)?.arguments.kind;
+  const choices: Readonly<Partial<Record<NonNullable<typeof kind>, readonly string[]>>> = {
+    size: ["1k", "1M", "1G", "100M"],
+    weekday: ["0", "1", "2", "3", "4", "5", "6", "7"],
+    monthday: ["1", "15", "31"],
+    create: ["0640", "0644", "0600"],
+    createolddir: ["0755", "0750", "0700"],
+    "date-format": ["-%Y%m%d", "-%Y%m%d-%H%M%S"],
+    "taboo-list": ["+ .bak", ".bak,.old"],
+  };
+  return (kind === undefined ? [] : (choices[kind] ?? [])).map((label): CompletionItem => ({
+    label,
+    kind: CompletionItemKind.Value,
+    insertText: label,
+  }));
+}
+
+async function completePath(
+  documentUri: string,
+  rawArgument: string,
+  fileSystem: FileSystemProvider,
+  cancelled: () => boolean,
+): Promise<CompletionItem[]> {
+  if (cancelled()) return [];
+  const argument = rawArgument.replace(/^["']/u, "").replace(/["']$/u, "");
+  const separator = argument.lastIndexOf("/");
+  const directory = separator >= 0 ? argument.slice(0, separator + 1) : "./";
+  const prefix = separator >= 0 ? argument.slice(separator + 1) : argument;
+  try {
+    const directoryUri = fileSystem.resolve(documentUri, directory);
+    const entries = await fileSystem.readDirectory(directoryUri);
+    if (cancelled()) return [];
+    return entries
+      .filter((entry) => entry.startsWith(prefix))
+      .slice(0, 200)
+      .map((entry): CompletionItem => ({
+        label: entry,
+        kind: CompletionItemKind.File,
+        insertText: entry,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 function detectNewline(source: string): string {
   return source.includes("\r\n") ? "\r\n" : source.includes("\r") ? "\r" : "\n";
+}
+
+function diagnosticSuggestion(data: unknown): string | undefined {
+  if (typeof data !== "object" || data === null || !("suggestion" in data)) return undefined;
+  const suggestion = (data as { readonly suggestion?: unknown }).suggestion;
+  return typeof suggestion === "string" ? suggestion : undefined;
+}
+
+function connectionFileSystem(
+  connection: Connection,
+  documents: TextDocuments<TextDocument>,
+): FileSystemProvider {
+  return {
+    async readFile(uri): Promise<string> {
+      const open = documents.get(uri);
+      return open?.getText() ?? connection.sendRequest(readFileRequest, { uri });
+    },
+    readDirectory(uri): Promise<readonly string[]> {
+      return connection.sendRequest(readDirectoryRequest, { uri });
+    },
+    stat(uri) {
+      return connection.sendRequest(statRequest, { uri });
+    },
+    resolve(baseUri, target) {
+      if (/^[a-z][a-z0-9+.-]*:/iu.test(target)) return normalizeUri(target);
+      const base = URI.parse(baseUri);
+      if (target.startsWith("/")) return base.with({ path: normalizePath(target) }).toString();
+      return Utils.resolvePath(Utils.dirname(base), target).toString();
+    },
+    normalize: normalizeUri,
+  };
+}
+
+function normalizeUri(value: string): string {
+  const uri = URI.parse(value);
+  return uri.with({ path: normalizePath(uri.path) }).toString();
+}
+
+function normalizePath(value: string): string {
+  const absolute = value.startsWith("/");
+  const segments: string[] = [];
+  for (const segment of value.split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+    } else {
+      segments.push(segment);
+    }
+  }
+  return `${absolute ? "/" : ""}${segments.join("/")}`;
 }

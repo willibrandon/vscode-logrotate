@@ -9,9 +9,11 @@
   },
   "include": [
     "packages/*/test/**/*.ts",
+    "packages/vscode-client/src/external-validator.ts",
     "scripts/test/**/*.ts",
     "test/**/*.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.performance.config.ts"
   ],
   "references": [
     {

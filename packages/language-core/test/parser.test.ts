@@ -65,6 +65,57 @@ tabooext + .bak
     );
   });
 
+  it("keeps multiline path spans aligned to original UTF-16 source", () => {
+    const source = `"/var/log/😀 one.log"
+  # header comment
+/var/log/two.log {
+  daily
+}
+`;
+    const block = rotationBlocks(parse(source))[0];
+    expect(block?.header.paths.map(({ value }) => value)).toEqual([
+      "/var/log/😀 one.log",
+      "/var/log/two.log",
+    ]);
+    for (const path of block?.header.paths ?? []) {
+      expect(source.slice(path.start, path.end)).toBe(path.raw);
+    }
+    expect(source.slice(block?.header.paths[1]?.start, block?.header.paths[1]?.end)).toBe(
+      "/var/log/two.log",
+    );
+  });
+
+  it("suggests only a uniquely close directive and rejects malformed separation", () => {
+    const source = "rotat 4\nzzzz 1\nrotate! 4\n";
+    const diagnostics = parse(source).diagnostics;
+    expect(diagnostics.find(({ start }) => start === 0)).toMatchObject({
+      code: "LR1001",
+      data: { suggestion: "rotate" },
+    });
+    const unrelated = diagnostics.find(({ start }) => start === 8);
+    expect(unrelated).toMatchObject({ code: "LR1001" });
+    expect(unrelated).not.toHaveProperty("data");
+    expect(diagnostics.map(({ code }) => code)).toContain("LR1010");
+  });
+
+  it("diagnoses unmatched terminators, brace trailers, empty paths, and empty values", () => {
+    const source = `endscript
+{} trailing
+/var/log/a { trailing
+  mail ""
+} trailing
+`;
+    expect(parse(source).diagnostics.map(({ code }) => code)).toEqual(
+      expect.arrayContaining(["LR1008", "LR1012", "LR1013", "LR1014", "LR1108"]),
+    );
+  });
+
+  it("uses the configured known target and stays conservative for unknown old targets", () => {
+    const source = "/var/log/a {\n  dateformat -%Q\n}\n";
+    expect(parse(source, { targetVersion: "3.22" }).diagnostics[0]?.message).toContain("3.22");
+    expect(parse(source, { targetVersion: "3.10" }).diagnostics).toEqual([]);
+  });
+
   it("diagnoses a missing script terminator without changing its body", () => {
     const source = "/var/log/a {\n  prerotate\n    echo data\n";
     const document = parse(source);
@@ -91,9 +142,54 @@ tabooext + .bak
     expect(diagnostics.find(({ code }) => code === "LR2007")?.related).toHaveLength(1);
   });
 
+  it("evaluates prerequisites in order with inherited globals and negations", () => {
+    const inherited = analyze(
+      parse(`compress
+/var/log/a {
+  delaycompress
+}
+nocompress
+/var/log/b {
+  delaycompress
+  compress
+}
+`),
+    ).filter(({ code }) => code === "LR2002");
+    expect(inherited).toEqual([]);
+
+    const notRetroactive = analyze(
+      parse(`/var/log/a {
+  delaycompress
+}
+compress
+`),
+    ).filter(({ code }) => code === "LR2002");
+    expect(notRetroactive).toHaveLength(1);
+    expect(notRetroactive[0]?.start).toBe(15);
+  });
+
+  it("honors later negative forms and caps semantic diagnostics", () => {
+    const source = `/var/log/a {
+  compress
+  nocompress
+  delaycompress
+  copy
+  nocopy
+  create
+  dateformat -%Y
+  mailfirst
+  shredcycles 2
+}
+`;
+    const diagnostics = analyze(parse(source, { maxProblems: 2 }));
+    expect(diagnostics).toHaveLength(2);
+    expect(diagnostics.map(({ code }) => code)).toEqual(["LR2002", "LR2003"]);
+  });
+
   it("caps diagnostics and honors cancellation", () => {
     const source = `${"UNKNOWN\n".repeat(20)}daily\n`;
     expect(parse(source, { maxProblems: 3 }).diagnostics).toHaveLength(3);
     expect(parse(source, { cancelled: () => true }).children).toEqual([]);
+    expect(parse(source, { cancelled: () => true }).tokens).toEqual([]);
   });
 });

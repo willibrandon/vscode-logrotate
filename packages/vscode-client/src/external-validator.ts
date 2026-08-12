@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
 import type { ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from "node:child_process";
+import { dirname } from "node:path";
+import process from "node:process";
+import { StringDecoder } from "node:string_decoder";
 
 export interface ProcessResult {
   readonly exitCode: number | null;
@@ -8,6 +11,7 @@ export interface ProcessResult {
   readonly stderr: string;
   readonly timedOut: boolean;
   readonly truncated: boolean;
+  readonly cancelled: boolean;
 }
 
 export interface ProcessLimits {
@@ -15,11 +19,17 @@ export interface ProcessLimits {
   readonly maxOutputBytes: number;
 }
 
+export interface ProcessRunOptions {
+  readonly cwd?: string;
+  readonly signal?: AbortSignal;
+}
+
 export interface ProcessHost {
   run(
     executable: string,
     arguments_: readonly string[],
     limits: ProcessLimits,
+    options?: ProcessRunOptions,
   ): Promise<ProcessResult>;
 }
 
@@ -30,6 +40,12 @@ export interface ExternalValidationResult {
   readonly stderr: string;
   readonly timedOut: boolean;
   readonly truncated: boolean;
+  readonly cancelled: boolean;
+}
+
+export interface ExternalValidationOptions {
+  readonly signal?: AbortSignal;
+  readonly isTrusted?: () => boolean;
 }
 
 const defaultLimits: ProcessLimits = {
@@ -42,15 +58,24 @@ export async function validateWithInstalledLogrotate(
   configurationPath: string,
   processHost: ProcessHost,
   limits: ProcessLimits = defaultLimits,
+  options: ExternalValidationOptions = {},
 ): Promise<ExternalValidationResult> {
-  const versionResult = await processHost.run(executable, ["--version"], limits);
+  assertExecutableAllowed(options);
+  const runOptions: ProcessRunOptions = {
+    cwd: dirname(configurationPath),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  };
+  const versionResult = await processHost.run(executable, ["--version"], limits, runOptions);
+  if (versionResult.cancelled) return { version: "unknown", ...versionResult };
   const version =
     /logrotate\s+([^\s]+)/u.exec(`${versionResult.stdout}\n${versionResult.stderr}`)?.[1] ??
     "unknown";
+  assertExecutableAllowed(options);
   const result = await processHost.run(
     executable,
     ["--debug", "--state", nullStatePath(), configurationPath],
     limits,
+    runOptions,
   );
   return { version, ...result };
 }
@@ -60,73 +85,141 @@ export class NodeProcessHost implements ProcessHost {
     executable: string,
     arguments_: readonly string[],
     limits: ProcessLimits,
+    runOptions: ProcessRunOptions = {},
   ): Promise<ProcessResult> {
     return new Promise((resolvePromise, rejectPromise): void => {
+      if (runOptions.signal?.aborted === true) {
+        resolvePromise({
+          exitCode: null,
+          signal: null,
+          stdout: "",
+          stderr: "",
+          timedOut: false,
+          truncated: false,
+          cancelled: true,
+        });
+        return;
+      }
+      const detached = process.platform !== "win32";
       const options: SpawnOptionsWithoutStdio = {
         shell: false,
         windowsHide: true,
         stdio: "pipe",
+        detached,
+        ...(runOptions.cwd === undefined ? {} : { cwd: runOptions.cwd }),
       };
       const child = spawn(executable, [...arguments_], options);
+      const stdoutDecoder = new StringDecoder("utf8");
+      const stderrDecoder = new StringDecoder("utf8");
       let stdout = "";
       let stderr = "";
       let outputBytes = 0;
       let truncated = false;
+      let timedOut = false;
+      let cancelled = false;
       let settled = false;
 
-      const collect = (current: string, chunk: Uint8Array): string => {
+      const collect = (current: string, chunk: Uint8Array, decoder: StringDecoder): string => {
         if (truncated) return current;
-        const remaining = limits.maxOutputBytes - outputBytes;
-        if (remaining <= 0) {
+        const remaining = Math.max(0, limits.maxOutputBytes - outputBytes);
+        if (remaining === 0) {
           truncated = true;
-          terminate(child);
+          terminateTree(child, detached);
           return current;
         }
         const bytes = chunk.subarray(0, remaining);
         outputBytes += bytes.byteLength;
         if (bytes.byteLength < chunk.byteLength) {
           truncated = true;
-          terminate(child);
+          terminateTree(child, detached);
         }
-        return `${current}${new TextDecoder().decode(bytes)}`;
+        return `${current}${decoder.write(Buffer.from(bytes))}`;
       };
 
-      child.stdout.on("data", (chunk: Uint8Array): void => {
-        stdout = collect(stdout, chunk);
+      child.stdout.on("data", (chunk: Buffer): void => {
+        stdout = collect(stdout, chunk, stdoutDecoder);
       });
-      child.stderr.on("data", (chunk: Uint8Array): void => {
-        stderr = collect(stderr, chunk);
+      child.stderr.on("data", (chunk: Buffer): void => {
+        stderr = collect(stderr, chunk, stderrDecoder);
       });
 
-      const timeout = setTimeout((): void => {
-        terminate(child);
-      }, limits.timeoutMilliseconds);
+      const timeout = setTimeout(
+        (): void => {
+          timedOut = true;
+          terminateTree(child, detached);
+        },
+        Math.max(1, limits.timeoutMilliseconds),
+      );
       timeout.unref();
 
+      const abort = (): void => {
+        cancelled = true;
+        terminateTree(child, detached);
+      };
+      runOptions.signal?.addEventListener("abort", abort, { once: true });
+
+      const cleanup = (): void => {
+        clearTimeout(timeout);
+        runOptions.signal?.removeEventListener("abort", abort);
+      };
       child.once("error", (error): void => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        cleanup();
         rejectPromise(error);
       });
       child.once("close", (exitCode, signal): void => {
         if (settled) return;
         settled = true;
-        const timedOut = child.killed && !truncated;
-        clearTimeout(timeout);
-        resolvePromise({ exitCode, signal, stdout, stderr, timedOut, truncated });
+        cleanup();
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
+        resolvePromise({
+          exitCode,
+          signal,
+          stdout,
+          stderr,
+          timedOut,
+          truncated,
+          cancelled,
+        });
       });
     });
   }
 }
 
-function terminate(child: ChildProcessWithoutNullStreams): void {
+function assertExecutableAllowed(options: ExternalValidationOptions): void {
+  if (options.signal?.aborted === true) throw new Error("Installed validation was cancelled.");
+  if (options.isTrusted?.() === false) {
+    throw new Error("Workspace trust was revoked before installed validation could run.");
+  }
+}
+
+function terminateTree(child: ChildProcessWithoutNullStreams, detached: boolean): void {
   if (child.exitCode !== null || child.signalCode !== null) return;
-  child.kill("SIGTERM");
+  signalProcess(child, detached, "SIGTERM");
   const force = setTimeout((): void => {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    if (child.exitCode === null && child.signalCode === null) {
+      signalProcess(child, detached, "SIGKILL");
+    }
   }, 500);
   force.unref();
+}
+
+function signalProcess(
+  child: ChildProcessWithoutNullStreams,
+  detached: boolean,
+  signal: NodeJS.Signals,
+): void {
+  if (detached && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // The child may have exited between the status check and group signal.
+    }
+  }
+  child.kill(signal);
 }
 
 function nullStatePath(): string {

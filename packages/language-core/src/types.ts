@@ -68,3 +68,26 @@ export interface SemanticDefinition {
   readonly tokenType: "keyword";
   readonly tokenModifiers: readonly "deprecated"[];
 }
+
+export interface VersionDefinition {
+  readonly version: string;
+  readonly upstreamRevision: string;
+  readonly dateFormatConversions: readonly string[];
+  readonly includeDepth: number;
+  readonly notes: string;
+}
+
+export type TargetVersionSetting = string;
+
+export interface TargetVersionDetection {
+  readonly allowed: boolean;
+  readonly version?: string;
+}
+
+export interface ResolvedTargetVersion {
+  readonly requested: TargetVersionSetting;
+  readonly version: string;
+  readonly source: "latest" | "detected" | "explicit";
+  readonly known: boolean;
+  readonly definition?: VersionDefinition;
+}

@@ -1,4 +1,5 @@
 import type { DirectiveDefinition, DirectiveScope } from "./types.js";
+import type { TargetVersionSetting } from "./types.js";
 
 export interface TextPosition {
   readonly line: number;
@@ -116,6 +117,7 @@ export interface ParsedDocument extends TextSpan {
   readonly tokens: readonly Token[];
   readonly children: readonly DocumentNode[];
   readonly diagnostics: readonly CoreDiagnostic[];
+  readonly maxProblems: number;
   readonly newline: "\n" | "\r\n" | "\r";
 }
 
@@ -127,13 +129,17 @@ export interface CoreDiagnostic extends TextSpan {
   readonly severity: DiagnosticSeverity;
   readonly message: string;
   readonly source: "logrotate" | "logrotate-state";
+  readonly resource?: string;
   readonly tags?: readonly DiagnosticTag[];
   readonly related?: readonly TextSpan[];
+  readonly data?: Readonly<Record<string, string | number | boolean>>;
 }
 
 export interface ValidationOptions {
   readonly maxProblems?: number;
-  readonly targetVersion?: string;
+  readonly targetVersion?: TargetVersionSetting;
+  readonly detectedVersion?: string;
+  readonly allowVersionDetection?: boolean;
   readonly cancelled?: () => boolean;
 }
 

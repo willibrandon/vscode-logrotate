@@ -1,15 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
+import { parse as parseYaml } from "yaml";
 import {
   completionTable,
   directiveByName,
   directiveNames,
   directives,
   hoverTable,
+  parse,
   semanticMetadata,
 } from "../src/index.js";
+import type { DirectiveDefinition } from "../src/index.js";
 
 const expectedNames =
   `hourly minutes daily weekly monthly yearly size minsize maxsize minage maxage rotate start compress nocompress delaycompress nodelaycompress compresscmd uncompresscmd compressext compressoptions copy nocopy copytruncate nocopytruncate renamecopy norenamecopy allowhardlink noallowhardlink create nocreate createolddir nocreateolddir olddir noolddir su dateext nodateext dateformat dateyesterday nodateyesterday datehourago nodatehourago extension addextension missingok nomissingok ifempty notifempty ignoreduplicates mail nomail mailfirst maillast shred noshred shredcycles firstaction lastaction prerotate postrotate preremove sharedscripts nosharedscripts endscript include tabooext taboopat errors`
@@ -61,10 +63,10 @@ describe("directive registry", () => {
 
   it("pins directive and version data to the reviewed upstream revision", async () => {
     const root = resolve(import.meta.dirname, "../../..");
-    const directiveData = parse(await readFile(resolve(root, "data/directives.yaml"), "utf8"), {
+    const directiveData = parseYaml(await readFile(resolve(root, "data/directives.yaml"), "utf8"), {
       merge: true,
     }) as unknown as DirectiveDataDocument;
-    const versionData = parse(
+    const versionData = parseYaml(
       await readFile(resolve(root, "data/versions.yaml"), "utf8"),
     ) as unknown as VersionDataDocument;
     const supportedVersion = versionData.supported[0];
@@ -73,4 +75,36 @@ describe("directive registry", () => {
     expect(supportedVersion?.upstreamRevision).toBe(directiveData.upstreamRevision);
     expect(versionData.latest).toBe("3.22");
   });
+
+  it.each(directives.map((directive) => [directive.name, directive] as const))(
+    "%s examples satisfy their declared argument grammar",
+    (_name, directive) => {
+      for (const example of directive.examples) {
+        const source = sourceForExample(directive, example);
+        expect(
+          parse(source).diagnostics.filter(({ code }) => code.startsWith("LR11")),
+          `${directive.name}: ${example}`,
+        ).toEqual([]);
+      }
+    },
+  );
+
+  it.each(
+    directives
+      .filter(
+        ({ arguments: argument }) =>
+          (argument.minimumArity ??
+            (["none", "script", "terminator"].includes(argument.kind) ? 0 : 1)) > 0,
+      )
+      .map((directive) => [directive.name, directive] as const),
+  )("%s diagnoses a missing required argument", (_name, directive) => {
+    const source = sourceForExample(directive, directive.name);
+    expect(parse(source).diagnostics.map(({ code }) => code)).toContain("LR1101");
+  });
 });
+
+function sourceForExample(directive: DirectiveDefinition, example: string): string {
+  if (directive.scopes.includes("global")) return `${example}\n`;
+  const terminator = directive.arguments.kind === "script" ? "endscript\n" : "";
+  return `/var/log/example {\n${example}\n${terminator}}\n`;
+}

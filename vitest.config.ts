@@ -4,7 +4,13 @@ const config: ViteUserConfig = defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts"],
-    exclude: ["node_modules/**", "dist/**", "test/integration/**", "test/web/**"],
+    exclude: [
+      "node_modules/**",
+      "dist/**",
+      "test/integration/**",
+      "test/performance/**",
+      "test/web/**",
+    ],
     testTimeout: 10_000,
     hookTimeout: 10_000,
     restoreMocks: true,

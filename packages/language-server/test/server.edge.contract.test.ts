@@ -282,7 +282,17 @@ describe("shared language server edge contracts", () => {
         "Add missing endscript",
       ]),
     );
-    expect(actions.every(({ kind, isPreferred }) => kind === "quickfix" && isPreferred)).toBe(true);
+    expect(actions.every(({ kind }) => kind === "quickfix")).toBe(true);
+    expect(
+      actions
+        .filter(({ title }) => !title.startsWith("Open upstream documentation"))
+        .every(({ isPreferred }) => isPreferred === true),
+    ).toBe(true);
+    expect(
+      actions
+        .filter(({ title }) => title.startsWith("Open upstream documentation"))
+        .every(({ isPreferred }) => isPreferred === false),
+    ).toBe(true);
 
     const inertDiagnostics: Diagnostic[] = [
       { range: zeroRange(), message: "unknown", code: "LR1001" },

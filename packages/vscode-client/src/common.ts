@@ -39,13 +39,30 @@ export function registerCommonCommands(
     }),
     vscode.commands.registerCommand(
       "logrotate.openDirectiveDocumentation",
-      async (): Promise<void> => {
-        await vscode.env.openExternal(
-          vscode.Uri.parse("https://github.com/logrotate/logrotate/blob/main/logrotate.8.in"),
-        );
+      async (candidate?: unknown): Promise<void> => {
+        await vscode.env.openExternal(documentationUri(candidate));
       },
     ),
   );
+}
+
+function documentationUri(candidate: unknown): vscode.Uri {
+  const fallback = vscode.Uri.parse(
+    "https://github.com/logrotate/logrotate/blob/main/logrotate.8.in",
+  );
+  if (typeof candidate !== "string") return fallback;
+  try {
+    const uri = vscode.Uri.parse(candidate, true);
+    return uri.scheme === "https" &&
+      uri.authority === "github.com" &&
+      /^\/logrotate\/logrotate\/blob\/(?:main|[0-9a-f]{40})\/logrotate\.8\.in$/u.test(uri.path) &&
+      uri.query === "" &&
+      uri.fragment === ""
+      ? uri
+      : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function registerFileSystemBridge(

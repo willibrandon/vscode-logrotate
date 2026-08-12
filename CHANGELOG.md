@@ -14,6 +14,8 @@ All notable changes to this project are documented here. The format follows
 - Optional trust-gated validation with an installed `logrotate --debug` process.
 - A reviewed Marketplace icon and structured, content-safe language server output logging.
 - Cross-analysis include caching and narrow loaded-resource refresh watchers.
+- Safe quick fixes for spelling, prerequisites, missing terminators, and explicitly selected paths,
+  with pinned upstream documentation actions for diagnostics.
 - Unit, property, grammar, JSON-RPC contract, performance, desktop, web, and package tests.
 
 ## [0.1.0] - Unreleased

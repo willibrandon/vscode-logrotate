@@ -638,41 +638,58 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     if (document === undefined || document.languageId === "logrotate-state") {
       return [];
     }
-    return params.context.diagnostics.flatMap((diagnostic): readonly CodeAction[] => {
-      if (diagnostic.code === "LR1001" || diagnostic.code === "LR1007") {
-        const suggestion =
-          diagnostic.code === "LR1007"
-            ? document.getText(diagnostic.range).toLowerCase()
-            : diagnosticSuggestion(diagnostic.data);
-        if (suggestion === undefined) return [];
-        return [
-          {
-            title: `Replace with “${suggestion}”`,
-            kind: CodeActionKind.QuickFix,
-            isPreferred: true,
-            diagnostics: [diagnostic],
-            edit: {
-              changes: { [document.uri]: [{ range: diagnostic.range, newText: suggestion }] },
+    const parsed = parse(document.getText(), { targetVersion: settings.targetVersion });
+    const selectedPath = quotablePathSelection(document, parsed, params.range);
+    const selectionActions: CodeAction[] =
+      selectedPath === undefined
+        ? []
+        : [
+            {
+              title: "Quote selected path",
+              kind: CodeActionKind.QuickFix,
+              isPreferred: false,
+              edit: {
+                changes: {
+                  [document.uri]: [{ range: params.range, newText: quoteArgument(selectedPath) }],
+                },
+              },
             },
-          },
-        ];
-      }
-      const prerequisite: Readonly<Record<string, string>> = {
-        LR2002: "compress",
-        LR2003: "dateext",
-        LR2005: "shred",
-      };
-      const prerequisiteName =
-        typeof diagnostic.code === "string" ? prerequisite[diagnostic.code] : undefined;
-      if (prerequisiteName !== undefined) {
-        const line = document.getText({
-          start: { line: diagnostic.range.start.line, character: 0 },
-          end: diagnostic.range.start,
-        });
-        const indentation = /^\s*/u.exec(line)?.[0] ?? "";
-        const start = { line: diagnostic.range.start.line, character: 0 };
-        return [
-          {
+          ];
+    const diagnosticActions = params.context.diagnostics.flatMap(
+      (diagnostic): readonly CodeAction[] => {
+        const actions: CodeAction[] = [];
+        if (diagnostic.code === "LR1001" || diagnostic.code === "LR1007") {
+          const suggestion =
+            diagnostic.code === "LR1007"
+              ? document.getText(diagnostic.range).toLowerCase()
+              : diagnosticSuggestion(diagnostic.data);
+          if (suggestion !== undefined) {
+            actions.push({
+              title: `Replace with “${suggestion}”`,
+              kind: CodeActionKind.QuickFix,
+              isPreferred: true,
+              diagnostics: [diagnostic],
+              edit: {
+                changes: { [document.uri]: [{ range: diagnostic.range, newText: suggestion }] },
+              },
+            });
+          }
+        }
+        const prerequisite: Readonly<Record<string, string>> = {
+          LR2002: "compress",
+          LR2003: "dateext",
+          LR2005: "shred",
+        };
+        const prerequisiteName =
+          typeof diagnostic.code === "string" ? prerequisite[diagnostic.code] : undefined;
+        if (prerequisiteName !== undefined) {
+          const line = document.getText({
+            start: { line: diagnostic.range.start.line, character: 0 },
+            end: diagnostic.range.start,
+          });
+          const indentation = /^\s*/u.exec(line)?.[0] ?? "";
+          const start = { line: diagnostic.range.start.line, character: 0 };
+          actions.push({
             title: `Add prerequisite “${prerequisiteName}”`,
             kind: CodeActionKind.QuickFix,
             isPreferred: true,
@@ -687,13 +704,11 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
                 ],
               },
             },
-          },
-        ];
-      }
-      if (diagnostic.code === "LR1006") {
-        const end = document.positionAt(document.getText().length);
-        return [
-          {
+          });
+        }
+        if (diagnostic.code === "LR1006") {
+          const end = document.positionAt(document.getText().length);
+          actions.push({
             title: "Add missing closing brace",
             kind: CodeActionKind.QuickFix,
             isPreferred: true,
@@ -708,13 +723,11 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
                 ],
               },
             },
-          },
-        ];
-      }
-      if (diagnostic.code === "LR1009") {
-        const end = document.positionAt(document.getText().length);
-        return [
-          {
+          });
+        }
+        if (diagnostic.code === "LR1009") {
+          const end = document.positionAt(document.getText().length);
+          actions.push({
             title: "Add missing endscript",
             kind: CodeActionKind.QuickFix,
             isPreferred: true,
@@ -729,11 +742,25 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
                 ],
               },
             },
-          },
-        ];
-      }
-      return [];
-    });
+          });
+        }
+        if (diagnostic.source === "logrotate") {
+          actions.push({
+            title: `Open upstream documentation for ${String(diagnostic.code)}`,
+            kind: CodeActionKind.QuickFix,
+            isPreferred: false,
+            diagnostics: [diagnostic],
+            command: {
+              title: "Open upstream documentation",
+              command: "logrotate.openDirectiveDocumentation",
+              arguments: [diagnosticDocumentation(document, parsed, diagnostic)],
+            },
+          });
+        }
+        return actions;
+      },
+    );
+    return [...selectionActions, ...diagnosticActions];
   });
 
   documents.listen(connection);
@@ -1138,6 +1165,73 @@ function diagnosticSuggestion(data: unknown): string | undefined {
   return typeof suggestion === "string" ? suggestion : undefined;
 }
 
+function diagnosticDocumentation(
+  document: TextDocument,
+  parsed: ParsedDocument,
+  diagnostic: Diagnostic,
+): string {
+  const selected = directiveAt(parsed.children, document.offsetAt(diagnostic.range.start));
+  return (
+    selected?.definition?.documentation ??
+    directiveByName.get("include")?.documentation ??
+    "https://github.com/logrotate/logrotate"
+  );
+}
+
+function quotablePathSelection(
+  document: TextDocument,
+  parsed: ParsedDocument,
+  selectedRange: { readonly start: Position; readonly end: Position },
+): string | undefined {
+  const start = document.offsetAt(selectedRange.start);
+  const end = document.offsetAt(selectedRange.end);
+  if (end <= start) return undefined;
+  const selected = document.getText().slice(start, end);
+  if (
+    !/[\t\v\f ]/u.test(selected) ||
+    /[\r\n]/u.test(selected) ||
+    selected.trim() !== selected ||
+    decodeArguments(selected).arguments.length <= 1
+  ) {
+    return undefined;
+  }
+  return selectionIsPath(parsed.children, start, end) ? selected : undefined;
+}
+
+function selectionIsPath(nodes: readonly DocumentNode[], start: number, end: number): boolean {
+  for (const node of nodes) {
+    if (node.kind === "rotation-block") {
+      const headerEnd = node.header.openBrace?.start ?? node.header.end;
+      if (node.header.start <= start && end <= headerEnd) return true;
+      if (selectionIsPath(node.children, start, end)) return true;
+      continue;
+    }
+    const directive =
+      node.kind === "include" ? node.directive : node.kind === "directive" ? node : undefined;
+    if (
+      directive?.definition?.arguments.kind === "path" &&
+      directive.nameSpan.end <= start &&
+      end <= directive.end
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function quoteArgument(value: string): string {
+  const quoted = `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+  const decoded = decodeArguments(quoted);
+  if (
+    decoded.diagnostics.length !== 0 ||
+    decoded.arguments.length !== 1 ||
+    decoded.arguments[0]?.value !== value
+  ) {
+    throw new Error("Unable to quote the selected path without changing its value.");
+  }
+  return quoted;
+}
+
 function connectionFileSystem(
   connection: Connection,
   documents: TextDocuments<TextDocument>,
@@ -1159,7 +1253,7 @@ function connectionFileSystem(
       if (target.startsWith("/")) return base.with({ path: normalizePath(target) }).toString();
       return Utils.resolvePath(Utils.dirname(base), target).toString();
     },
-    join(baseDirectoryUri, entry) {
+    join(baseDirectoryUri: string, entry: string): string {
       return Utils.resolvePath(URI.parse(baseDirectoryUri), entry).toString();
     },
     normalize: normalizeUri,

@@ -294,7 +294,68 @@ describe("shared language server contract", () => {
       kind: "quickfix",
       isPreferred: true,
     });
+    expect(actions).toContainEqual(
+      expect.objectContaining({
+        title: "Open upstream documentation for LR1001",
+        kind: "quickfix",
+        isPreferred: false,
+        diagnostics: [expect.objectContaining({ code: "LR1001" })],
+        command: {
+          title: "Open upstream documentation",
+          command: "logrotate.openDirectiveDocumentation",
+          arguments: [
+            "https://github.com/logrotate/logrotate/blob/3be1e9ccffe0c2245ed596183c74913d553f9f18/logrotate.8.in",
+          ],
+        },
+      }),
+    );
     expect(actions.some(({ title }) => /reorder/iu.test(title))).toBe(false);
+  });
+
+  it("quotes only an explicitly selected path containing whitespace", async () => {
+    harness = await createServerHarness();
+    const source = "/var/log/my app.log {\n}\n";
+    await harness.open(uri, "logrotate", source);
+    const selectedEnd = source.indexOf(" {");
+    const actions = await request<CodeAction[]>(harness, "textDocument/codeAction", {
+      textDocument: { uri },
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: selectedEnd },
+      },
+      context: { diagnostics: [] },
+    });
+    expect(actions).toEqual([
+      {
+        title: "Quote selected path",
+        kind: "quickfix",
+        isPreferred: false,
+        edit: {
+          changes: {
+            [uri]: [
+              {
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: selectedEnd },
+                },
+                newText: '"/var/log/my app.log"',
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    expect(
+      await request<CodeAction[]>(harness, "textDocument/codeAction", {
+        textDocument: { uri },
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: "/var/log/my".length },
+        },
+        context: { diagnostics: [] },
+      }),
+    ).toEqual([]);
   });
 
   it("keeps state files read-only while providing diagnostics and warning hover", async () => {

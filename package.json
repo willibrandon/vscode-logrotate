@@ -28,7 +28,6 @@
     "linux",
     "language-server"
   ],
-  "type": "module",
   "packageManager": "npm@11.17.0",
   "workspaces": [
     "packages/*"
@@ -249,10 +248,10 @@
     "test:lsp": "vitest run packages/language-server/test",
     "test:client": "vitest run packages/vscode-client/test",
     "test:grammar": "vitest run test/grammar",
-    "test:performance": "vitest run --config vitest.performance.config.ts",
+    "test:performance": "vitest run --config vitest.performance.config.mts",
     "test:package": "vitest run test/package",
-    "test:integration": "vscode-test",
-    "test:web": "vscode-test-web --config .vscode-test-web.mjs",
+    "test:integration": "npm run build && xvfb-run -a vscode-test --config .vscode-test.mjs",
+    "test:web": "npm run build && node ./scripts/run-web-tests.mjs",
     "build": "node ./esbuild.mjs",
     "check:bundles": "node ./scripts/check-bundles.mjs",
     "audit": "npm audit --audit-level=moderate",

@@ -6,6 +6,8 @@ export default tseslint.config(
     ignores: [
       "dist/**",
       "node_modules/**",
+      ".vscode-test/**",
+      ".vscode-test-web/**",
       "packages/*/lib/**",
       "packages/language-core/src/generated/**",
       "syntaxes/*.json",
@@ -15,7 +17,7 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,mts}"],
     languageOptions: {
       parserOptions: {
         projectService: true,

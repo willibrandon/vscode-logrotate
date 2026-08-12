@@ -22,7 +22,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
-  registerFileSystemBridge({ client, output });
+  registerFileSystemBridge(context, { client, output });
   const diagnostics = vscode.languages.createDiagnosticCollection("logrotate-installed");
   const activeValidations = new Map<string, AbortController>();
   context.subscriptions.push(diagnostics);
@@ -73,6 +73,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }
   };
+  const updateExternalValidationContext = async (): Promise<void> => {
+    const document = vscode.window.activeTextEditor?.document;
+    const available =
+      document !== undefined &&
+      externalValidationUnavailable({
+        isDesktop: true,
+        isTrusted: vscode.workspace.isTrusted,
+        scheme: document.uri.scheme,
+        isSaved: !document.isUntitled && !document.isDirty,
+        languageId: document.languageId,
+      }) === undefined;
+    await vscode.commands.executeCommand(
+      "setContext",
+      "logrotate.externalValidationAvailable",
+      available,
+    );
+  };
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "logrotate.validateWithInstalledLogrotate",
@@ -88,6 +105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       },
     ),
     vscode.workspace.onDidSaveTextDocument(async (document): Promise<void> => {
+      await updateExternalValidationContext();
       const mode = vscode.workspace
         .getConfiguration("logrotate", document.uri)
         .get<string>("externalValidation.mode", "off");
@@ -98,8 +116,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       activeValidations.delete(document.uri.toString());
       diagnostics.delete(document.uri);
     }),
+    vscode.workspace.onDidChangeTextDocument(async ({ document }): Promise<void> => {
+      if (document === vscode.window.activeTextEditor?.document) {
+        await updateExternalValidationContext();
+      }
+    }),
+    vscode.window.onDidChangeActiveTextEditor(updateExternalValidationContext),
+    vscode.workspace.onDidGrantWorkspaceTrust(updateExternalValidationContext),
   );
   await client.start();
+  await updateExternalValidationContext();
 }
 
 export async function deactivate(): Promise<void> {

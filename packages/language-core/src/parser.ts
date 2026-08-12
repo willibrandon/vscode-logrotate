@@ -26,6 +26,12 @@ interface ParseContext {
   index: number;
 }
 
+interface DirectiveCandidate {
+  readonly name: string;
+  readonly start: number;
+  readonly end: number;
+}
+
 const scriptNames = new Set(["firstaction", "lastaction", "prerotate", "postrotate", "preremove"]);
 
 export function parse(source: string, options: ValidationOptions = {}): ParsedDocument {
@@ -88,22 +94,20 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
       context.index += 1;
       continue;
     }
-    const candidate = /^\s*([A-Za-z]+)/u.exec(content);
-    const key = /^\s*([A-Za-z]+)(?=\s|=|$)/u.exec(content);
-    if (key !== null) {
-      const name = key[1] ?? "";
+    const candidate = scanDirectiveCandidate(content);
+    const name = candidate?.name ?? "";
+    if (candidate !== undefined && isDirectiveSeparator(content[candidate.end])) {
       if (scriptNames.has(name)) {
-        nodes.push(parseScript(context, scope, name, key));
+        nodes.push(parseScript(context, scope, name, candidate));
         continue;
       }
-      const directive = parseDirective(context, scope, name, key);
+      const directive = parseDirective(context, scope, name, candidate);
       nodes.push(name === "include" ? toInclude(directive) : directive);
       context.index += 1;
       continue;
     }
-    if (candidate !== null) {
-      const name = candidate[1] ?? "";
-      const start = line.start + candidate.index + candidate[0].lastIndexOf(name);
+    if (candidate !== undefined) {
+      const start = line.start + candidate.start;
       addDiagnostic(context, {
         code: "LR1010",
         severity: "error",
@@ -174,10 +178,7 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
     }
     context.index += 1;
     const next = context.lines[context.index];
-    if (
-      next === undefined ||
-      /^\s*[A-Za-z]+(?=\s|=|$)/u.test(context.source.slice(next.start, next.contentEnd))
-    ) {
+    if (next === undefined || isDirectiveLine(context.source.slice(next.start, next.contentEnd))) {
       break;
     }
   }
@@ -284,7 +285,7 @@ function parseDirective(
   context: ParseContext,
   scope: DirectiveScope,
   name: string,
-  match: RegExpExecArray,
+  match: DirectiveCandidate,
   matchedScriptTerminator?: boolean,
 ): DirectiveNode {
   const line = context.lines[context.index];
@@ -292,7 +293,7 @@ function parseDirective(
     throw new Error("Parser line invariant violated.");
   }
   const content = context.source.slice(line.start, line.contentEnd);
-  const nameLocalStart = match.index + match[0].lastIndexOf(name);
+  const nameLocalStart = match.start;
   const nameSpan = {
     start: line.start + nameLocalStart,
     end: line.start + nameLocalStart + name.length,
@@ -343,7 +344,7 @@ function parseDirective(
     });
   }
   let argumentStart = nameLocalStart + name.length;
-  while (argumentStart < content.length && /[\t\v\f =]/u.test(content[argumentStart] ?? "")) {
+  while (argumentStart < content.length && isDirectiveSeparator(content[argumentStart])) {
     argumentStart += 1;
   }
   const decoded = decodeArguments(content, argumentStart, content.length);
@@ -375,11 +376,51 @@ function parseDirective(
   };
 }
 
+function isDirectiveSeparator(character: string | undefined): boolean {
+  return (
+    character === undefined ||
+    character === " " ||
+    character === "\t" ||
+    character === "\v" ||
+    character === "\f" ||
+    character === "="
+  );
+}
+
+function isHorizontalWhitespace(character: string | undefined): boolean {
+  return character === " " || character === "\t" || character === "\v" || character === "\f";
+}
+
+function scanDirectiveCandidate(content: string): DirectiveCandidate | undefined {
+  let start = 0;
+  while (isHorizontalWhitespace(content[start])) start += 1;
+  let end = start;
+  while (isAsciiLetter(content.charCodeAt(end))) end += 1;
+  if (end === start) return undefined;
+  return { name: content.slice(start, end), start, end };
+}
+
+function isDirectiveLine(content: string): boolean {
+  const candidate = scanDirectiveCandidate(content);
+  return candidate !== undefined && isDirectiveSeparator(content[candidate.end]);
+}
+
+function onlyHorizontalWhitespaceAfter(content: string, start: number): boolean {
+  for (let index = start; index < content.length; index += 1) {
+    if (!isHorizontalWhitespace(content[index])) return false;
+  }
+  return true;
+}
+
+function isAsciiLetter(code: number): boolean {
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
 function parseScript(
   context: ParseContext,
   scope: DirectiveScope,
   name: string,
-  match: RegExpExecArray,
+  match: DirectiveCandidate,
 ): ScriptNode {
   const starter = parseDirective(context, scope, name, match);
   const startLine = context.lines[context.index];
@@ -396,8 +437,8 @@ function parseScript(
       break;
     }
     const content = context.source.slice(line.start, line.contentEnd);
-    const endMatch = /^\s*(endscript)(?:\s*)$/u.exec(content);
-    if (endMatch !== null) {
+    const endMatch = scanDirectiveCandidate(content);
+    if (endMatch?.name === "endscript" && onlyHorizontalWhitespaceAfter(content, endMatch.end)) {
       bodyEnd = line.start;
       terminator = parseDirective(context, "block", "endscript", endMatch, true);
       context.index += 1;

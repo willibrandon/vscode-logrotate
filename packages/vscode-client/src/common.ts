@@ -16,6 +16,7 @@ export function clientOptions(output: vscode.LogOutputChannel): LanguageClientOp
     documentSelector: [{ language: "logrotate" }, { language: "logrotate-state" }],
     outputChannel: output,
     markdown: { isTrusted: false },
+    synchronize: { configurationSection: "logrotate" },
   };
 }
 
@@ -42,26 +43,31 @@ export function registerCommonCommands(
   );
 }
 
-export function registerFileSystemBridge(runtime: ClientRuntime): void {
-  runtime.client.onRequest(readFileRequest, async ({ uri }): Promise<string> => {
-    const bytes = await vscode.workspace.fs.readFile(vscode.Uri.parse(uri));
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  });
-  runtime.client.onRequest(readDirectoryRequest, async ({ uri }): Promise<readonly string[]> => {
-    const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.parse(uri));
-    return entries.map(([name]) => name);
-  });
-  runtime.client.onRequest(statRequest, async ({ uri }) => {
-    const stat = await vscode.workspace.fs.stat(vscode.Uri.parse(uri));
-    return {
-      type:
-        (stat.type & vscode.FileType.Directory) !== 0
-          ? ("directory" as const)
-          : (stat.type & vscode.FileType.File) !== 0
-            ? ("file" as const)
-            : ("other" as const),
-      size: stat.size,
-      mtime: stat.mtime,
-    };
-  });
+export function registerFileSystemBridge(
+  context: vscode.ExtensionContext,
+  runtime: ClientRuntime,
+): void {
+  context.subscriptions.push(
+    runtime.client.onRequest(readFileRequest, async ({ uri }): Promise<string> => {
+      const bytes = await vscode.workspace.fs.readFile(vscode.Uri.parse(uri));
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    }),
+    runtime.client.onRequest(readDirectoryRequest, async ({ uri }): Promise<readonly string[]> => {
+      const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.parse(uri));
+      return entries.map(([name]) => name);
+    }),
+    runtime.client.onRequest(statRequest, async ({ uri }) => {
+      const stat = await vscode.workspace.fs.stat(vscode.Uri.parse(uri));
+      return {
+        type:
+          (stat.type & vscode.FileType.Directory) !== 0
+            ? ("directory" as const)
+            : (stat.type & vscode.FileType.File) !== 0
+              ? ("file" as const)
+              : ("other" as const),
+        size: stat.size,
+        mtime: stat.mtime,
+      };
+    }),
+  );
 }

@@ -1,0 +1,14 @@
+import { runTests } from "@vscode/test-web";
+import { resolve } from "node:path";
+
+const root = resolve(import.meta.dirname, "..");
+
+await runTests({
+  browserType: "chromium",
+  extensionDevelopmentPath: root,
+  extensionTestsPath: resolve(root, "dist/test/web/index.cjs"),
+  folderPath: resolve(root, "test/fixtures/workspace"),
+  headless: true,
+  quality: process.env.VSCODE_WEB_QUALITY === "insiders" ? "insiders" : "stable",
+  testRunnerDataDir: resolve(root, ".vscode-test-web"),
+});

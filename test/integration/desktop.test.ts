@@ -102,7 +102,7 @@ suite("Logrotate desktop extension", () => {
       content: source,
     });
     const editor = await vscode.window.showTextDocument(document);
-    editor.selections = [0, 1, 2, 4].map((line) => {
+    const selections = [0, 1, 2, 4].map((line) => {
       const position = new vscode.Position(
         line,
         document.lineAt(line).firstNonWhitespaceCharacterIndex,
@@ -110,7 +110,7 @@ suite("Logrotate desktop extension", () => {
       return new vscode.Selection(position, position);
     });
 
-    await vscode.commands.executeCommand("editor.action.commentLine");
+    await toggleCommentsAfterEmbeddedLanguagesLoad(editor, document, selections, source, 4);
 
     assert.equal(document.lineAt(0).text, "# /var/log/application.log {");
     assert.equal(document.lineAt(1).text, "  # daily");
@@ -121,6 +121,26 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.getText(), source);
   });
 });
+
+async function toggleCommentsAfterEmbeddedLanguagesLoad(
+  editor: vscode.TextEditor,
+  document: vscode.TextDocument,
+  selections: readonly vscode.Selection[],
+  source: string,
+  embeddedLine: number,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    editor.selections = [...selections];
+    await vscode.commands.executeCommand("editor.action.commentLine");
+    if (document.lineAt(embeddedLine).text === "    echo rotated") return;
+
+    await vscode.commands.executeCommand("undo");
+    assert.equal(document.getText(), source);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.fail("embedded shell language did not become available to the comment command");
+}
 
 async function waitForDiagnostics(uri: vscode.Uri): Promise<readonly vscode.Diagnostic[]> {
   const deadline = Date.now() + 10_000;

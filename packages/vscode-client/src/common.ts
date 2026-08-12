@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
 import type { BaseLanguageClient, LanguageClientOptions } from "vscode-languageclient";
+import type { LoadedIncludeResource } from "@logrotate/language-server/protocol";
 import {
+  includedResourceChangedNotification,
+  loadedIncludesNotification,
   readDirectoryRequest,
   readFileRequest,
   statRequest,
@@ -72,4 +75,105 @@ export function registerFileSystemBridge(
       };
     }),
   );
+}
+
+export function registerLoadedIncludeWatching(
+  context: vscode.ExtensionContext,
+  runtime: ClientRuntime,
+): void {
+  const roots = new Map<string, ReadonlyMap<string, LoadedIncludeResource["type"]>>();
+  const watchers = new Map<
+    string,
+    { readonly type: LoadedIncludeResource["type"]; readonly watcher: vscode.FileSystemWatcher }
+  >();
+  let disposed = false;
+
+  const reportChange = (uri: string): void => {
+    void runtime.client
+      .sendNotification(includedResourceChangedNotification, { uri })
+      .catch((error: unknown): void => {
+        runtime.output.error(
+          `Unable to refresh changed included resource: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  };
+
+  const reconcile = (): void => {
+    const required = new Map<string, LoadedIncludeResource["type"]>();
+    for (const resources of roots.values()) {
+      for (const [uri, type] of resources) required.set(uri, type);
+    }
+    for (const [uri, entry] of watchers) {
+      if (required.get(uri) === entry.type) continue;
+      entry.watcher.dispose();
+      watchers.delete(uri);
+    }
+    for (const [value, type] of required) {
+      if (watchers.has(value)) continue;
+      const uri = vscode.Uri.parse(value);
+      if (uri.scheme !== "file") continue;
+      try {
+        const pattern =
+          type === "directory"
+            ? new vscode.RelativePattern(uri, "*")
+            : new vscode.RelativePattern(
+                vscode.Uri.joinPath(uri, ".."),
+                escapeGlobPattern(uri.path.slice(uri.path.lastIndexOf("/") + 1)),
+              );
+        const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+        watcher.onDidCreate((changed): void => reportChange(changed.toString()));
+        watcher.onDidChange((changed): void => reportChange(changed.toString()));
+        watcher.onDidDelete((changed): void => reportChange(changed.toString()));
+        watchers.set(value, { type, watcher });
+      } catch (error) {
+        runtime.output.warn(
+          `Unable to watch included resource: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  };
+
+  context.subscriptions.push(
+    runtime.client.onNotification(loadedIncludesNotification, ({ rootUri, resources }): void => {
+      if (disposed) return;
+      if (resources.length === 0) {
+        roots.delete(rootUri);
+      } else {
+        roots.set(
+          rootUri,
+          new Map(
+            resources.flatMap(({ uri, type }) => {
+              try {
+                return vscode.Uri.parse(uri).scheme === "file" ? [[uri, type] as const] : [];
+              } catch {
+                return [];
+              }
+            }),
+          ),
+        );
+      }
+      reconcile();
+    }),
+    {
+      dispose(): void {
+        if (disposed) return;
+        disposed = true;
+        roots.clear();
+        for (const { watcher } of watchers.values()) watcher.dispose();
+        watchers.clear();
+      },
+    },
+  );
+}
+
+function escapeGlobPattern(value: string): string {
+  const escaped: Readonly<Record<string, string>> = {
+    "*": "[*]",
+    "?": "[?]",
+    "[": "[[]",
+    "]": "[]]",
+    "{": "[{]",
+    "}": "[}]",
+  };
+  return value.replace(/[*?{}]|\[|\]/gu, (character) => escaped[character] ?? character);
 }

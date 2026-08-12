@@ -20,6 +20,7 @@ export interface FileSystemProvider {
   readDirectory(uri: string): Promise<readonly string[]>;
   stat(uri: string): Promise<ResourceStat>;
   resolve(baseUri: string, target: string): string;
+  join(baseDirectoryUri: string, entry: string): string;
   normalize(uri: string): string;
 }
 
@@ -55,6 +56,7 @@ export interface RotationSettingsSnapshot {
 export interface IncludeGraph {
   readonly root: string;
   readonly files: ReadonlyMap<string, IncludeFile>;
+  readonly resources: ReadonlyMap<string, "file" | "directory">;
   readonly rotations: readonly RotationSettingsSnapshot[];
   readonly diagnostics: readonly CoreDiagnostic[];
   readonly totalBytes: number;
@@ -70,11 +72,14 @@ interface BuildState {
   readonly bounds: IncludeLimits;
   readonly fileSystem: FileSystemProvider;
   readonly files: Map<string, IncludeFile>;
+  readonly resources: Map<string, "file" | "directory">;
   readonly documents: Map<string, ParsedDocument>;
   readonly byteLengths: Map<string, number>;
   readonly diagnostics: CoreDiagnostic[];
   readonly rotations: RotationSettingsSnapshot[];
   readonly isCancellationRequested: () => boolean;
+  readonly cache: IncludeAnalysisCache | undefined;
+  readonly targetVersion: string;
   totalBytes: number;
   cancelled: boolean;
 }
@@ -115,25 +120,74 @@ const defaultLimits: IncludeLimits = {
   maxDirectoryEntries: 4096,
 };
 
+export interface CachedIncludeAnalysis {
+  readonly uri: string;
+  readonly document: ParsedDocument;
+  readonly byteLength: number;
+}
+
+export class IncludeAnalysisCache {
+  readonly #entries = new Map<string, CachedIncludeAnalysis>();
+
+  public get(
+    uri: string,
+    stat: ResourceStat,
+    targetVersion: string,
+    inheritedFingerprint: string,
+  ): CachedIncludeAnalysis | undefined {
+    return this.#entries.get(cacheKey(uri, stat, targetVersion, inheritedFingerprint));
+  }
+
+  public set(
+    uri: string,
+    stat: ResourceStat,
+    targetVersion: string,
+    inheritedFingerprint: string,
+    document: ParsedDocument,
+    byteLength: number,
+  ): void {
+    this.#entries.set(cacheKey(uri, stat, targetVersion, inheritedFingerprint), {
+      uri,
+      document,
+      byteLength,
+    });
+  }
+
+  public invalidate(uri: string): void {
+    for (const [key, entry] of this.#entries) {
+      if (entry.uri === uri) this.#entries.delete(key);
+    }
+  }
+
+  public clear(): void {
+    this.#entries.clear();
+  }
+}
+
 export async function buildIncludeGraph(
   rootUri: string,
   rootSource: string,
   fileSystem: FileSystemProvider,
   limits: Partial<IncludeLimits> = {},
   cancelled: () => boolean = () => false,
+  cache?: IncludeAnalysisCache,
+  targetVersion = "latest",
 ): Promise<IncludeGraph> {
   const normalizedRoot = fileSystem.normalize(rootUri);
   const rootBytes = utf8ByteLength(rootSource);
-  const rootDocument = parse(rootSource, { cancelled });
+  const rootDocument = parse(rootSource, { cancelled, targetVersion });
   const state: BuildState = {
     bounds: { ...defaultLimits, ...limits },
     fileSystem,
     files: new Map(),
+    resources: new Map(),
     documents: new Map([[normalizedRoot, rootDocument]]),
     byteLengths: new Map([[normalizedRoot, rootBytes]]),
     diagnostics: [],
     rotations: [],
     isCancellationRequested: cancelled,
+    cache,
+    targetVersion,
     totalBytes: rootBytes,
     cancelled: false,
   };
@@ -156,6 +210,7 @@ export async function buildIncludeGraph(
   return {
     root: normalizedRoot,
     files: state.files,
+    resources: state.resources,
     rotations: state.rotations,
     diagnostics: state.diagnostics,
     totalBytes: state.totalBytes,
@@ -220,6 +275,9 @@ async function processInclude(
   const target = include.target?.value;
   if (target === undefined || checkCancellation(state)) return inherited;
   const targetUri = state.fileSystem.normalize(state.fileSystem.resolve(containingUri, target));
+  // Treat an unresolved target as a file until stat proves otherwise so a local
+  // watcher can observe its later creation and request a fresh analysis.
+  state.resources.set(targetUri, "file");
   let targetStat: ResourceStat;
   try {
     targetStat = await state.fileSystem.stat(targetUri);
@@ -235,6 +293,10 @@ async function processInclude(
     return inherited;
   }
   if (checkCancellation(state)) return inherited;
+
+  if (targetStat.type === "file" || targetStat.type === "directory") {
+    state.resources.set(targetUri, targetStat.type);
+  }
 
   if (targetStat.type === "file") {
     return processIncludedFile(
@@ -290,9 +352,7 @@ async function processInclude(
   for (const entry of entries) {
     if (checkCancellation(state)) break;
     if (entry === "." || entry === ".." || isTabooName(entry, current.tabooPatterns)) continue;
-    const entryUri = state.fileSystem.normalize(
-      state.fileSystem.resolve(targetUri.endsWith("/") ? targetUri : `${targetUri}/`, entry),
-    );
+    const entryUri = state.fileSystem.normalize(state.fileSystem.join(targetUri, entry));
     let entryStat: ResourceStat;
     try {
       entryStat = await state.fileSystem.stat(entryUri);
@@ -332,6 +392,7 @@ async function processIncludedFile(
   include: IncludeNode,
   containingUri: string,
 ): Promise<TraversalState> {
+  state.resources.set(uri, "file");
   if (ancestors.has(uri)) {
     state.diagnostics.push(
       includeDiagnostic(
@@ -372,22 +433,35 @@ async function processIncludedFile(
       state.diagnostics.push(sizeDiagnostic(uri, include, containingUri));
       return inherited;
     }
-    let source: string;
-    try {
-      source = await state.fileSystem.readFile(uri);
-    } catch {
-      state.diagnostics.push(
-        includeDiagnostic(
-          "LR3001",
-          `Cannot read included resource “${bounded(uri)}”.`,
-          include,
-          containingUri,
-        ),
-      );
-      return inherited;
+    const fingerprint = traversalFingerprint(inherited);
+    const cached = state.cache?.get(uri, stat, state.targetVersion, fingerprint);
+    let bytes: number;
+    if (cached === undefined) {
+      let source: string;
+      try {
+        source = await state.fileSystem.readFile(uri);
+      } catch {
+        state.diagnostics.push(
+          includeDiagnostic(
+            "LR3001",
+            `Cannot read included resource “${bounded(uri)}”.`,
+            include,
+            containingUri,
+          ),
+        );
+        return inherited;
+      }
+      if (checkCancellation(state)) return inherited;
+      bytes = utf8ByteLength(source);
+      document = parse(source, {
+        cancelled: state.isCancellationRequested,
+        targetVersion: state.targetVersion,
+      });
+      state.cache?.set(uri, stat, state.targetVersion, fingerprint, document, bytes);
+    } else {
+      bytes = cached.byteLength;
+      document = cached.document;
     }
-    if (checkCancellation(state)) return inherited;
-    const bytes = utf8ByteLength(source);
     if (
       bytes > state.bounds.maxFileBytes ||
       state.totalBytes + bytes > state.bounds.maxTotalBytes
@@ -396,7 +470,6 @@ async function processIncludedFile(
       return inherited;
     }
     state.totalBytes += bytes;
-    document = parse(source, { cancelled: state.isCancellationRequested });
     state.documents.set(uri, document);
     state.byteLengths.set(uri, bytes);
   }
@@ -540,4 +613,29 @@ function includeDiagnostic(
 function bounded(value: string): string {
   const maximum = 256;
   return value.length <= maximum ? value : `${value.slice(0, maximum)}…`;
+}
+
+function traversalFingerprint(state: TraversalState): string {
+  return JSON.stringify({
+    settings: [...state.settings]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([name, { uri, directive }]) => [name, uri, directive.raw]),
+    tabooPatterns: state.tabooPatterns,
+  });
+}
+
+function cacheKey(
+  uri: string,
+  stat: ResourceStat,
+  targetVersion: string,
+  inheritedFingerprint: string,
+): string {
+  return JSON.stringify([
+    uri,
+    stat.size ?? null,
+    stat.mtime ?? null,
+    stat.etag ?? null,
+    targetVersion,
+    inheritedFingerprint,
+  ]);
 }

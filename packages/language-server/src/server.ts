@@ -5,6 +5,7 @@ import {
   decodeArguments,
   directiveByName,
   format,
+  IncludeAnalysisCache,
   parse,
   parseState,
   rotationBlocks,
@@ -53,7 +54,13 @@ import type {
   TextEdit,
 } from "vscode-languageserver";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { readDirectoryRequest, readFileRequest, statRequest } from "./protocol.js";
+import {
+  includedResourceChangedNotification,
+  loadedIncludesNotification,
+  readDirectoryRequest,
+  readFileRequest,
+  statRequest,
+} from "./protocol.js";
 
 const tokenTypes = ["keyword", "string", "number", "comment", "parameter"] as const;
 const tokenModifiers = ["deprecated"] as const;
@@ -82,6 +89,8 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
   const pendingDiagnostics = new Map<string, unknown>();
   const diagnosticJobs = new Set<Promise<void>>();
   const loadedIncludes = new Map<string, ReadonlySet<string>>();
+  const loadedResources = new Map<string, ReadonlyMap<string, "file" | "directory">>();
+  const includeCache = new IncludeAnalysisCache();
   const fileSystem = connectionFileSystem(connection, documents);
 
   const cancelPending = (uri: string): void => {
@@ -104,6 +113,8 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
         settings,
         fileSystem,
         loadedIncludes,
+        loadedResources,
+        includeCache,
       ).catch((error: unknown): void => {
         connection.console.error(
           `[textDocument/publishDiagnostics] Analysis failed for ${formatResourceForLog(document.uri)}: ${safeLogText(errorMessage(error))}`,
@@ -115,6 +126,20 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       });
     }, 150);
     pendingDiagnostics.set(document.uri, handle);
+  };
+  const scheduleAffectedRoots = (resourceUri: string, excludedRoot?: string): void => {
+    for (const [rootUri, resources] of loadedResources) {
+      if (
+        rootUri === excludedRoot ||
+        ![...resources].some(([loadedUri, type]) =>
+          resourceContainsChange(loadedUri, type, resourceUri),
+        )
+      ) {
+        continue;
+      }
+      const root = documents.get(rootUri);
+      if (root !== undefined) scheduleDiagnostics(root);
+    }
   };
 
   connection.onInitialize((params: InitializeParams): InitializeResult => {
@@ -161,6 +186,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       },
       targetVersion: candidate?.targetVersion ?? defaultSettings.targetVersion,
     };
+    includeCache.clear();
     connection.console.info(
       `[workspace/didChangeConfiguration] Configuration updated: validation=${settings.validation.enable ? "enabled" : "disabled"}, maxProblems=${settings.validation.maxProblems}, targetVersion=${safeLogText(settings.targetVersion)}.`,
     );
@@ -169,15 +195,31 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     }
   });
 
+  connection.onNotification(includedResourceChangedNotification, ({ uri }): void => {
+    const normalized = fileSystem.normalize(uri);
+    includeCache.invalidate(normalized);
+    connection.console.info(
+      `[logrotate/includes/changed] Loaded include changed: ${formatResourceForLog(normalized)}.`,
+    );
+    scheduleAffectedRoots(normalized);
+  });
+
   documents.onDidOpen(({ document }): void => {
+    includeCache.invalidate(document.uri);
     connection.console.info(
       `[textDocument/didOpen] Opened ${formatResourceForLog(document.uri)} (${safeLogText(document.languageId)}, version ${document.version}).`,
     );
     scheduleDiagnostics(document);
+    scheduleAffectedRoots(document.uri, document.uri);
   });
-  documents.onDidChangeContent(({ document }): void => scheduleDiagnostics(document));
+  documents.onDidChangeContent(({ document }): void => {
+    includeCache.invalidate(document.uri);
+    scheduleDiagnostics(document);
+    scheduleAffectedRoots(document.uri, document.uri);
+  });
   documents.onDidClose(({ document }): void => {
     cancelPending(document.uri);
+    includeCache.invalidate(document.uri);
     connection.console.info(
       `[textDocument/didClose] Closed ${formatResourceForLog(document.uri)}.`,
     );
@@ -185,6 +227,11 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       await connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
       await clearRemovedIncludes(connection, document.uri, new Set(), loadedIncludes);
       loadedIncludes.delete(document.uri);
+      loadedResources.delete(document.uri);
+      await connection.sendNotification(loadedIncludesNotification, {
+        rootUri: document.uri,
+        resources: [],
+      });
     })().catch((error: unknown): void => {
       connection.console.error(
         `[textDocument/didClose] Cleanup failed for ${formatResourceForLog(document.uri)}: ${safeLogText(errorMessage(error))}`,
@@ -193,6 +240,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     diagnosticJobs.add(job);
     void job.finally((): void => {
       diagnosticJobs.delete(job);
+      scheduleAffectedRoots(document.uri, document.uri);
     });
   });
 
@@ -699,10 +747,17 @@ async function publishDiagnostics(
   settings: ServerSettings,
   fileSystem: FileSystemProvider,
   loadedIncludes: Map<string, ReadonlySet<string>>,
+  loadedResources: Map<string, ReadonlyMap<string, "file" | "directory">>,
+  includeCache: IncludeAnalysisCache,
 ): Promise<void> {
   if (!settings.validation.enable) {
     await connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
     await clearRemovedIncludes(connection, document.uri, new Set(), loadedIncludes);
+    loadedResources.set(document.uri, new Map());
+    await connection.sendNotification(loadedIncludesNotification, {
+      rootUri: document.uri,
+      resources: [],
+    });
     connection.console.info(
       `[textDocument/publishDiagnostics] Validation disabled; cleared diagnostics for ${formatResourceForLog(document.uri)}.`,
     );
@@ -717,6 +772,11 @@ async function publishDiagnostics(
       version: document.version,
       diagnostics: core.map((item): Diagnostic => toDiagnostic(document, item)),
     });
+    loadedResources.set(document.uri, new Map());
+    await connection.sendNotification(loadedIncludesNotification, {
+      rootUri: document.uri,
+      resources: [],
+    });
     logAnalysis(connection, document, core.length, 1);
     return;
   }
@@ -728,6 +788,8 @@ async function publishDiagnostics(
     fileSystem,
     {},
     () => documents.get(document.uri)?.version !== version,
+    includeCache,
+    settings.targetVersion,
   );
   if (graph.cancelled || documents.get(document.uri)?.version !== version) return;
 
@@ -755,6 +817,13 @@ async function publishDiagnostics(
   }
   await clearRemovedIncludes(connection, document.uri, currentIncludes, loadedIncludes);
   loadedIncludes.set(document.uri, currentIncludes);
+  loadedResources.set(document.uri, graph.resources);
+  await connection.sendNotification(loadedIncludesNotification, {
+    rootUri: document.uri,
+    resources: [...graph.resources]
+      .map(([uri, type]) => ({ uri, type }))
+      .sort((left, right) => left.uri.localeCompare(right.uri)),
+  });
   logAnalysis(connection, document, diagnosticCount, graph.files.size);
 }
 
@@ -799,6 +868,20 @@ function formatResourceForLog(value: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function resourceContainsChange(
+  loadedUri: string,
+  type: "file" | "directory",
+  changedUri: string,
+): boolean {
+  if (loadedUri === changedUri) return true;
+  if (type !== "directory") return false;
+  const loaded = URI.parse(loadedUri);
+  const changed = URI.parse(changedUri);
+  if (loaded.scheme !== changed.scheme || loaded.authority !== changed.authority) return false;
+  const prefix = loaded.path.endsWith("/") ? loaded.path : `${loaded.path}/`;
+  return changed.path.startsWith(prefix);
 }
 
 function safeLogText(value: string, maximumLength = 500): string {
@@ -1075,6 +1158,9 @@ function connectionFileSystem(
       const base = URI.parse(baseUri);
       if (target.startsWith("/")) return base.with({ path: normalizePath(target) }).toString();
       return Utils.resolvePath(Utils.dirname(base), target).toString();
+    },
+    join(baseDirectoryUri, entry) {
+      return Utils.resolvePath(URI.parse(baseDirectoryUri), entry).toString();
     },
     normalize: normalizeUri,
   };

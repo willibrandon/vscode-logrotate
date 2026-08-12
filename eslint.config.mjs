@@ -26,6 +26,7 @@ export default tseslint.config(
       },
     },
     rules: {
+      "@typescript-eslint/array-type": ["error", { default: "array" }],
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-confusing-void-expression": ["error", { ignoreArrowShorthand: true }],
       "@typescript-eslint/no-magic-numbers": "off",

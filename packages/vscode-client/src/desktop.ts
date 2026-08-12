@@ -1,7 +1,12 @@
 import * as vscode from "vscode";
 import { LanguageClient, TransportKind } from "vscode-languageclient/node";
 import type { ServerOptions } from "vscode-languageclient/node";
-import { clientOptions, registerCommonCommands, registerFileSystemBridge } from "./common.js";
+import {
+  clientOptions,
+  registerCommonCommands,
+  registerFileSystemBridge,
+  registerLoadedIncludeWatching,
+} from "./common.js";
 import {
   explainUnavailability,
   externalValidationUnavailable,
@@ -24,6 +29,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
   registerFileSystemBridge(context, { client, output });
+  registerLoadedIncludeWatching(context, { client, output });
   const diagnostics = vscode.languages.createDiagnosticCollection("logrotate-installed");
   const activeValidations = new Map<string, AbortController>();
   context.subscriptions.push(diagnostics);

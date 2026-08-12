@@ -9,7 +9,7 @@ export {
 export { decodeArguments } from "./arguments.js";
 export { analyze, rotationBlocks } from "./analysis.js";
 export { applyEdits, format } from "./formatter.js";
-export { buildIncludeGraph } from "./include-graph.js";
+export { buildIncludeGraph, IncludeAnalysisCache } from "./include-graph.js";
 export { lex } from "./lexer.js";
 export { parse } from "./parser.js";
 export { SourceMap } from "./source-map.js";

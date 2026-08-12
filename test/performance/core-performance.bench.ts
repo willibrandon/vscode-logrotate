@@ -89,7 +89,7 @@ function deepIncludeFileSystem(): FileSystemProvider {
     files.set(`file:///workspace/depth-${depth}.conf`, `${next}${directives}`);
   }
   return {
-    readFile(uri): Promise<string> {
+    readFile(uri: string): Promise<string> {
       const source = files.get(uri);
       if (source === undefined) throw new Error(`Missing benchmark resource ${uri}`);
       return Promise.resolve(source);
@@ -97,18 +97,18 @@ function deepIncludeFileSystem(): FileSystemProvider {
     readDirectory(): Promise<readonly string[]> {
       throw new Error("The deep include benchmark contains no directory includes.");
     },
-    stat(uri): Promise<ResourceStat> {
+    stat(uri: string): Promise<ResourceStat> {
       const source = files.get(uri);
       if (source === undefined) throw new Error(`Missing benchmark resource ${uri}`);
       return Promise.resolve({ type: "file", size: source.length, mtime: 1 });
     },
-    resolve(baseUri, target): string {
+    resolve(baseUri: string, target: string): string {
       return new URL(target, baseUri).toString();
     },
-    join(baseDirectoryUri, entry): string {
+    join(baseDirectoryUri: string, entry: string): string {
       return new URL(entry, `${baseDirectoryUri.replace(/\/$/u, "")}/`).toString();
     },
-    normalize(value): string {
+    normalize(value: string): string {
       return new URL(value).toString();
     },
   };

@@ -12,6 +12,7 @@ import type {
   SignatureHelp,
   TextEdit,
 } from "vscode-languageserver";
+import { detectedTargetVersionNotification } from "../src/protocol.js";
 import { createServerHarness, type ServerHarness } from "./harness.js";
 
 const uri = "file:///workspace/logrotate.conf";
@@ -217,6 +218,35 @@ describe("shared language server contract", () => {
     );
     expect(signature?.signatures[0]?.label).toBe("create <mode> <owner> <group>");
     expect(signature?.activeParameter).toBe(2);
+  });
+
+  it("uses a safely detected supported version for auto and falls back on invalid input", async () => {
+    harness = await createServerHarness();
+    await harness.configure({ logrotate: { targetVersion: "auto" } });
+    await harness.open(uri, "logrotate", "daily\n");
+    await harness.waitForDiagnostics(uri);
+
+    await harness.client.sendNotification(detectedTargetVersionNotification, {
+      version: "3.22.0",
+    });
+    await harness.waitForLog(({ message }) => message.includes("Detected local logrotate 3.22.0"));
+    expect(
+      markdown(await request<Hover | null>(harness, "textDocument/hover", position(0, 2))),
+    ).toContain("Target: 3.22 (detected)");
+
+    await harness.client.sendNotification(detectedTargetVersionNotification, {
+      version: "3.22.0\n[error] forged",
+    });
+    await harness.waitForLog(({ message }) => message.includes("Local version unavailable"));
+    expect(
+      markdown(await request<Hover | null>(harness, "textDocument/hover", position(0, 2))),
+    ).toContain("Target: 3.22 (latest fallback)");
+    expect(
+      harness
+        .logMessages()
+        .map(({ message }) => message)
+        .join("\n"),
+    ).not.toContain("[error] forged");
   });
 
   it("provides symbols, folds, selection, links, definition, references, and semantic refinements", async () => {

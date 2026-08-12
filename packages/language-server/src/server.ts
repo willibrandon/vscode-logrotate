@@ -8,6 +8,7 @@ import {
   IncludeAnalysisCache,
   parse,
   parseState,
+  resolveTargetVersion,
   rotationBlocks,
 } from "@logrotate/language-core";
 import type {
@@ -16,6 +17,7 @@ import type {
   DocumentNode,
   FileSystemProvider,
   ParsedDocument,
+  ResolvedTargetVersion,
   TextSpan,
 } from "@logrotate/language-core";
 import { URI, Utils } from "vscode-uri";
@@ -55,6 +57,7 @@ import type {
 } from "vscode-languageserver";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import {
+  detectedTargetVersionNotification,
   includedResourceChangedNotification,
   loadedIncludesNotification,
   readDirectoryRequest,
@@ -86,12 +89,18 @@ const defaultSettings: ServerSettings = {
 export function startLanguageServer(connection: Connection, timers: TimerHost): void {
   const documents = new TextDocuments(TextDocument);
   let settings: ServerSettings = defaultSettings;
+  let detectedTargetVersion: string | undefined;
   const pendingDiagnostics = new Map<string, unknown>();
   const diagnosticJobs = new Set<Promise<void>>();
   const loadedIncludes = new Map<string, ReadonlySet<string>>();
   const loadedResources = new Map<string, ReadonlyMap<string, "file" | "directory">>();
   const includeCache = new IncludeAnalysisCache();
   const fileSystem = connectionFileSystem(connection, documents);
+  const currentTargetVersion = () =>
+    resolveTargetVersion(settings.targetVersion, {
+      allowed: settings.targetVersion === "auto" && detectedTargetVersion !== undefined,
+      ...(detectedTargetVersion === undefined ? {} : { version: detectedTargetVersion }),
+    });
 
   const cancelPending = (uri: string): void => {
     const pending = pendingDiagnostics.get(uri);
@@ -115,6 +124,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
         loadedIncludes,
         loadedResources,
         includeCache,
+        currentTargetVersion().version,
       ).catch((error: unknown): void => {
         connection.console.error(
           `[textDocument/publishDiagnostics] Analysis failed for ${formatResourceForLog(document.uri)}: ${safeLogText(errorMessage(error))}`,
@@ -202,6 +212,20 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       `[logrotate/includes/changed] Loaded include changed: ${formatResourceForLog(normalized)}.`,
     );
     scheduleAffectedRoots(normalized);
+  });
+
+  connection.onNotification(detectedTargetVersionNotification, ({ version }): void => {
+    const next = validDetectedVersion(version) ? version : undefined;
+    if (next === detectedTargetVersion) return;
+    detectedTargetVersion = next;
+    includeCache.clear();
+    const resolved = currentTargetVersion();
+    connection.console.info(
+      next === undefined
+        ? `[logrotate/targetVersion/detected] Local version unavailable; auto uses reviewed logrotate ${resolved.version}.`
+        : `[logrotate/targetVersion/detected] Detected local logrotate ${safeLogText(next)}; auto resolves to ${resolved.version}.`,
+    );
+    for (const document of documents.all()) scheduleDiagnostics(document);
   });
 
   documents.onDidOpen(({ document }): void => {
@@ -328,11 +352,12 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       definition.interactions.length === 0
         ? ""
         : `\n\nRelated: ${definition.interactions.map((name) => `\`${name}\``).join(", ")}.`;
+    const target = currentTargetVersion();
     return {
       range: word.range,
       contents: {
         kind: MarkupKind.Markdown,
-        value: `**${definition.name}** · ${definition.arguments.kind}\n\n${definition.summary}${status}${interactions}\n\nValid in: ${definition.scopes.join(", ")} · Since: ${definition.since} · Target: ${settings.targetVersion} · [Upstream documentation](${definition.documentation})`,
+        value: `**${definition.name}** · ${definition.arguments.kind}\n\n${definition.summary}${status}${interactions}\n\nValid in: ${definition.scopes.join(", ")} · Since: ${definition.since} · Target: ${targetLabel(target)} · [Upstream documentation](${definition.documentation})`,
       },
     };
   });
@@ -638,7 +663,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     if (document === undefined || document.languageId === "logrotate-state") {
       return [];
     }
-    const parsed = parse(document.getText(), { targetVersion: settings.targetVersion });
+    const parsed = parse(document.getText(), { targetVersion: currentTargetVersion().version });
     const selectedPath = quotablePathSelection(document, parsed, params.range);
     const selectionActions: CodeAction[] =
       selectedPath === undefined
@@ -776,6 +801,7 @@ async function publishDiagnostics(
   loadedIncludes: Map<string, ReadonlySet<string>>,
   loadedResources: Map<string, ReadonlyMap<string, "file" | "directory">>,
   includeCache: IncludeAnalysisCache,
+  targetVersion: string,
 ): Promise<void> {
   if (!settings.validation.enable) {
     await connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
@@ -816,7 +842,7 @@ async function publishDiagnostics(
     {},
     () => documents.get(document.uri)?.version !== version,
     includeCache,
-    settings.targetVersion,
+    targetVersion,
   );
   if (graph.cancelled || documents.get(document.uri)?.version !== version) return;
 
@@ -829,7 +855,7 @@ async function publishDiagnostics(
       open ?? TextDocument.create(uri, "logrotate", 0, included.document.source);
     const parsed = parse(diagnosticDocument.getText(), {
       maxProblems: settings.validation.maxProblems,
-      targetVersion: settings.targetVersion,
+      targetVersion,
     });
     const core = [
       ...analyze(parsed),
@@ -1163,6 +1189,21 @@ function diagnosticSuggestion(data: unknown): string | undefined {
   if (typeof data !== "object" || data === null || !("suggestion" in data)) return undefined;
   const suggestion = (data as { readonly suggestion?: unknown }).suggestion;
   return typeof suggestion === "string" ? suggestion : undefined;
+}
+
+function validDetectedVersion(value: string | null): value is string {
+  return (
+    value !== null &&
+    value.length <= 64 &&
+    /^\d+\.\d+(?:\.\d+)?(?:[-+._][0-9A-Za-z.-]+)?$/u.test(value)
+  );
+}
+
+function targetLabel(target: ResolvedTargetVersion): string {
+  if (target.source === "detected") return `${target.version} (detected)`;
+  if (target.requested === "auto") return `${target.version} (latest fallback)`;
+  if (target.source === "latest") return `${target.version} (latest)`;
+  return target.version;
 }
 
 function diagnosticDocumentation(

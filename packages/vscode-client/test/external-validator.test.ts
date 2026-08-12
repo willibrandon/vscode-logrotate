@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  detectInstalledLogrotateVersion,
   NodeProcessHost,
   validateWithInstalledLogrotate,
   type ProcessHost,
@@ -17,6 +18,42 @@ const success: ProcessResult = {
 };
 
 describe("installed logrotate validator", () => {
+  it("detects a version with one bounded no-shell probe and rechecks trust", async () => {
+    let trusted = true;
+    const run = vi
+      .fn<ProcessHost["run"]>()
+      .mockResolvedValue({ ...success, stdout: "logrotate 3.22.0\n" });
+
+    await expect(
+      detectInstalledLogrotateVersion("/opt/logrotate", { run }, { isTrusted: () => trusted }),
+    ).resolves.toBe("3.22.0");
+    expect(run).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledWith(
+      "/opt/logrotate",
+      ["--version"],
+      { timeoutMilliseconds: 5_000, maxOutputBytes: 64 * 1024 },
+      {},
+    );
+
+    trusted = false;
+    await expect(
+      detectInstalledLogrotateVersion("/opt/logrotate", { run }, { isTrusted: () => trusted }),
+    ).rejects.toThrow("trust was revoked");
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { name: "failed", result: { exitCode: 1 } },
+    { name: "timed out", result: { timedOut: true } },
+    { name: "truncated", result: { truncated: true } },
+    { name: "cancelled", result: { cancelled: true } },
+  ])("falls back when version detection is $name", async ({ result }) => {
+    const run = vi
+      .fn<ProcessHost["run"]>()
+      .mockResolvedValue({ ...success, stdout: "logrotate 3.22.0\n", ...result });
+    await expect(detectInstalledLogrotateVersion("logrotate", { run })).resolves.toBeUndefined();
+  });
+
   it("uses exact argv, an isolated state, a containing cwd, and never a shell string", async () => {
     const run = vi
       .fn<ProcessHost["run"]>()

@@ -53,6 +53,26 @@ const defaultLimits: ProcessLimits = {
   maxOutputBytes: 256 * 1024,
 };
 
+const versionDetectionLimits: ProcessLimits = {
+  timeoutMilliseconds: 5_000,
+  maxOutputBytes: 64 * 1024,
+};
+
+export async function detectInstalledLogrotateVersion(
+  executable: string,
+  processHost: ProcessHost,
+  options: ExternalValidationOptions = {},
+): Promise<string | undefined> {
+  assertExecutableAllowed(options);
+  const result = await processHost.run(executable, ["--version"], versionDetectionLimits, {
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
+  if (result.cancelled || result.timedOut || result.truncated || result.exitCode !== 0) {
+    return undefined;
+  }
+  return logrotateVersion(result);
+}
+
 export async function validateWithInstalledLogrotate(
   executable: string,
   configurationPath: string,
@@ -67,9 +87,7 @@ export async function validateWithInstalledLogrotate(
   };
   const versionResult = await processHost.run(executable, ["--version"], limits, runOptions);
   if (versionResult.cancelled) return { version: "unknown", ...versionResult };
-  const version =
-    /logrotate\s+([^\s]+)/u.exec(`${versionResult.stdout}\n${versionResult.stderr}`)?.[1] ??
-    "unknown";
+  const version = logrotateVersion(versionResult) ?? "unknown";
   assertExecutableAllowed(options);
   const result = await processHost.run(
     executable,
@@ -78,6 +96,10 @@ export async function validateWithInstalledLogrotate(
     runOptions,
   );
   return { version, ...result };
+}
+
+function logrotateVersion(result: ProcessResult): string | undefined {
+  return /(?:^|\s)logrotate\s+([^\s]+)/iu.exec(`${result.stdout}\n${result.stderr}`)?.[1];
 }
 
 export class NodeProcessHost implements ProcessHost {

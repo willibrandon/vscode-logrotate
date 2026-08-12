@@ -73,6 +73,10 @@ Internal validation models the reviewed logrotate language. Optional installed v
 `logrotate --debug` and reflects the current host's version, filesystem, accounts, build options,
 and include graph. It is a secondary opinion, not the extension parser or formatter.
 
+The `auto` target runs only `logrotate --version`, and only in a trusted local desktop extension
+host. Browser, virtual, untrusted, unavailable, failed, or unsupported detections safely use the
+latest reviewed language model instead.
+
 ## Commands
 
 - **Logrotate: Validate Current File with Installed Logrotate**

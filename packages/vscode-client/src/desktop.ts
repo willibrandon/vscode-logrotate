@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { LanguageClient, TransportKind } from "vscode-languageclient/node";
 import type { ServerOptions } from "vscode-languageclient/node";
+import { detectedTargetVersionNotification } from "@logrotate/language-server/protocol";
 import {
   clientOptions,
   registerCommonCommands,
@@ -8,10 +9,15 @@ import {
   registerLoadedIncludeWatching,
 } from "./common.js";
 import {
+  canDetectTargetVersion,
   explainUnavailability,
   externalValidationUnavailable,
 } from "./external-validation-policy.js";
-import { NodeProcessHost, validateWithInstalledLogrotate } from "./external-validator.js";
+import {
+  detectInstalledLogrotateVersion,
+  NodeProcessHost,
+  validateWithInstalledLogrotate,
+} from "./external-validator.js";
 
 let client: LanguageClient | undefined;
 
@@ -26,17 +32,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     serverOptions,
     clientOptions(output),
   );
+  const languageClient = client;
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
   registerFileSystemBridge(context, { client, output });
   registerLoadedIncludeWatching(context, { client, output });
   const diagnostics = vscode.languages.createDiagnosticCollection("logrotate-installed");
   const activeValidations = new Map<string, AbortController>();
+  let versionDetection: AbortController | undefined;
+  let detectionKey: string | undefined;
+  let detectedVersion: string | null = null;
   context.subscriptions.push(diagnostics);
   context.subscriptions.push({
     dispose(): void {
       for (const controller of activeValidations.values()) controller.abort();
       activeValidations.clear();
+      versionDetection?.abort();
     },
   });
   const validate = async (document: vscode.TextDocument, explicit: boolean): Promise<void> => {
@@ -134,6 +145,74 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   output.info("Starting Logrotate language server.");
   await client.start();
   output.info("Logrotate language server started.");
+  const publishDetectedVersion = async (version: string | null): Promise<void> => {
+    if (version === detectedVersion) return;
+    detectedVersion = version;
+    await languageClient.sendNotification(detectedTargetVersionNotification, { version });
+  };
+  const refreshTargetVersion = async (force = false): Promise<void> => {
+    const resource = vscode.window.activeTextEditor?.document.uri;
+    const configuration = vscode.workspace.getConfiguration("logrotate", resource);
+    const targetVersion = configuration.get<string>("targetVersion", "latest");
+    const executable = configuration.get<string>("executablePath", "logrotate");
+    const scheme = resource?.scheme ?? vscode.workspace.workspaceFolders?.[0]?.uri.scheme;
+    const key = `${targetVersion}\0${executable}\0${scheme ?? "none"}\0${String(vscode.workspace.isTrusted)}`;
+    if (!force && key === detectionKey) return;
+    detectionKey = key;
+    versionDetection?.abort();
+    versionDetection = undefined;
+    if (
+      !canDetectTargetVersion({
+        isDesktop: true,
+        isTrusted: vscode.workspace.isTrusted,
+        scheme,
+        targetVersion,
+      })
+    ) {
+      await publishDetectedVersion(null);
+      return;
+    }
+    const controller = new AbortController();
+    versionDetection = controller;
+    try {
+      const version = await detectInstalledLogrotateVersion(executable, new NodeProcessHost(), {
+        signal: controller.signal,
+        isTrusted: () => vscode.workspace.isTrusted,
+      });
+      if (controller.signal.aborted || versionDetection !== controller) return;
+      await publishDetectedVersion(version ?? null);
+      output.info(
+        version === undefined
+          ? "Installed logrotate version was unavailable; auto target uses the latest reviewed version."
+          : `Detected installed logrotate ${safeMessage(version)} for the auto target.`,
+      );
+    } catch (error) {
+      if (controller.signal.aborted || versionDetection !== controller) return;
+      await publishDetectedVersion(null);
+      output.info(
+        `Installed logrotate version was unavailable; auto target uses the latest reviewed version (${safeMessage(error instanceof Error ? error.message : String(error))}).`,
+      );
+    } finally {
+      if (versionDetection === controller) versionDetection = undefined;
+    }
+  };
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(async (event): Promise<void> => {
+      if (
+        event.affectsConfiguration("logrotate.targetVersion") ||
+        event.affectsConfiguration("logrotate.executablePath")
+      ) {
+        await refreshTargetVersion(true);
+      }
+    }),
+    vscode.window.onDidChangeActiveTextEditor(async (): Promise<void> => {
+      await refreshTargetVersion();
+    }),
+    vscode.workspace.onDidGrantWorkspaceTrust(async (): Promise<void> => {
+      await refreshTargetVersion(true);
+    }),
+  );
+  await refreshTargetVersion();
   await updateExternalValidationContext();
 }
 

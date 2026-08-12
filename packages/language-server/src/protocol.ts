@@ -29,6 +29,10 @@ export interface IncludedResourceChangedParams {
   readonly uri: string;
 }
 
+export interface DetectedTargetVersionParams {
+  readonly version: string | null;
+}
+
 export const readFileRequest: RequestType<ReadFileParams, string, void> = new RequestType<
   ReadFileParams,
   string,
@@ -45,3 +49,5 @@ export const loadedIncludesNotification: NotificationType<LoadedIncludesParams> 
   new NotificationType<LoadedIncludesParams>("logrotate/includes/loaded");
 export const includedResourceChangedNotification: NotificationType<IncludedResourceChangedParams> =
   new NotificationType<IncludedResourceChangedParams>("logrotate/includes/changed");
+export const detectedTargetVersionNotification: NotificationType<DetectedTargetVersionParams> =
+  new NotificationType<DetectedTargetVersionParams>("logrotate/targetVersion/detected");

@@ -13,7 +13,7 @@
 .sl-markdown-content
   :not(h1, h2, h3, h4, h5, h6, .sl-heading-wrapper)
   + .sl-heading-wrapper.level-h2 {
-  margin-top: 1.15em;
+  margin-top: 0.75em;
 }
 
 .sl-markdown-content img {

@@ -13,6 +13,8 @@ No release is authorized until every item has evidence. The package identity is
 
 ## Candidate evidence
 
+The unchecked boxes in this section are intentionally reset for each release candidate.
+
 - [ ] Tag is exactly `v<package.json version>`, protected and immutable, and points to a clean
       commit.
 - [ ] `CHANGELOG.md` contains that version and release date.
@@ -37,3 +39,15 @@ and runs the desktop activation suite before it makes the GitHub release public.
 The release workflow enforces machine-checkable preconditions. Store identities, environment
 protection rules, contacts, and final governance remain human approvals and cannot be inferred by
 CI.
+
+## Completed releases
+
+Evidence for v0.1.6 is available in the [GitHub pre-release], [Visual Studio Marketplace listing],
+[required CI run], and [CodeQL run]. The Marketplace verifier follow-up was merged in [PR #11].
+
+[GitHub pre-release]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.6
+[Visual Studio Marketplace listing]:
+  https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate
+[required CI run]: https://github.com/willibrandon/vscode-logrotate/actions/runs/31625236303
+[CodeQL run]: https://github.com/willibrandon/vscode-logrotate/actions/runs/31625236262
+[PR #11]: https://github.com/willibrandon/vscode-logrotate/pull/11

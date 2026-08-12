@@ -5,6 +5,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Marketplace release verification now waits for service validation and retries only transient
+  installation-feed propagation failures.
+
 ## [0.1.6] - 2026-08-12
 
 ### Added

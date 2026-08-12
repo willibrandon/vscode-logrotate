@@ -3,10 +3,10 @@
 Language support for [logrotate](https://github.com/logrotate/logrotate) configuration and state
 files in Visual Studio Code desktop, remote, and web extension hosts.
 
-> [!IMPORTANT] Version 0.1.6 is an early public pre-release. The language model is currently pinned
-> to logrotate `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later reviewed syntax).
+**Version 0.1.6 is an early public pre-release.** The language model is currently pinned to
+logrotate `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later reviewed syntax).
 
-## Target 1.0 feature set
+## Features
 
 - Immediate TextMate syntax highlighting without extension activation.
 - Dedicated highlighting for configuration files, state files, embedded shell script blocks, and

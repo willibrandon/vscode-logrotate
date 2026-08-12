@@ -87,6 +87,9 @@ describe("documentation contract", () => {
     expect(readme).toContain("Browser and virtual workspaces");
     expect(readme).toContain("secondary opinion, not the extension parser or formatter");
     expect(readme).toContain("no telemetry and makes no runtime network requests");
+    expect(readme).toContain(
+      "https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate",
+    );
   });
 
   it("keeps the user site complete, concise, and independent from maintainer identity", async () => {

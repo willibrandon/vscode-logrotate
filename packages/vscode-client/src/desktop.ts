@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
+import process from "node:process";
 import { LanguageClient, TransportKind } from "vscode-languageclient/node";
 import type { ServerOptions } from "vscode-languageclient/node";
 import { detectedTargetVersionNotification } from "@logrotate/language-server/protocol";
 import {
   clientOptions,
   registerCommonCommands,
+  registerContentDetection,
   registerFileSystemBridge,
   registerLoadedIncludeSupport,
 } from "./common.js";
@@ -36,8 +38,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const languageClient = client;
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
+  registerContentDetection(context, { client, output });
   registerFileSystemBridge(context, { client, output });
-  registerLoadedIncludeSupport(context, { client, output });
+  registerLoadedIncludeSupport(context, {
+    client,
+    fileUriCaseInsensitive: process.platform === "win32",
+    output,
+  });
   const diagnostics = vscode.languages.createDiagnosticCollection("logrotate-installed");
   const activeValidations = new Map<string, AbortController>();
   let versionDetection: AbortController | undefined;

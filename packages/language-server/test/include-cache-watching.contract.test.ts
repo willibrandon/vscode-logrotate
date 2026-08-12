@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { includedResourceChangedNotification } from "../src/protocol.js";
+import {
+  includedResourceChangedNotification,
+  refreshDiagnosticsNotification,
+} from "../src/protocol.js";
 import { createServerHarness } from "./harness.js";
 import type { ServerHarness } from "./harness.js";
 import type { TimerHost } from "../src/server.js";
@@ -179,8 +182,26 @@ describe("include cache and loaded-resource server contract", () => {
       }),
     );
     const openDelays = delays.slice(delaysBeforeOpen);
-    expect(openDelays[0]).toBe(0);
-    expect(openDelays.slice(1).every((delay) => delay === 150)).toBe(true);
+    expect(openDelays.every((delay) => delay === 150)).toBe(true);
+
+    const afterRefresh = harness.diagnosticPublications().length;
+    await harness.client.sendNotification(refreshDiagnosticsNotification, { uri: includedUri });
+    const refreshedPublication = await harness.waitForDiagnostics(
+      includedUri,
+      (diagnostics, publication) =>
+        publication.version === 1 && diagnostics.some(({ code }) => code === "LR1001"),
+      afterRefresh,
+    );
+    expect(refreshedPublication.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "LR1001",
+        range: {
+          start: { line: 1, character: 4 },
+          end: { line: 1, character: 10 },
+        },
+      }),
+    );
+    expect(delays.at(-1)).toBe(150);
   });
 
   it("refreshes a root when a child of its loaded include directory changes", async () => {

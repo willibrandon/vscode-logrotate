@@ -36,8 +36,9 @@ describe("extension manifest", () => {
     expect(icon.byteLength).toBeLessThan(100_000);
   });
 
-  it("declares narrow configuration and state associations without eager activation", () => {
-    expect(manifest.activationEvents).toBeUndefined();
+  it("declares narrow associations with delayed startup content detection", () => {
+    expect(manifest.activationEvents).toEqual(["onStartupFinished"]);
+    expect(manifest.activationEvents).not.toContain("*");
     expect(manifest.contributes.languages).toEqual([
       expect.objectContaining({
         id: "logrotate",

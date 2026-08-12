@@ -29,6 +29,10 @@ export interface IncludedResourceChangedParams {
   readonly uri: string;
 }
 
+export interface RefreshDiagnosticsParams {
+  readonly uri: string;
+}
+
 export interface DetectedTargetVersionParams {
   readonly uri: string;
   readonly version: string | null;
@@ -50,5 +54,7 @@ export const loadedIncludesNotification: NotificationType<LoadedIncludesParams> 
   new NotificationType<LoadedIncludesParams>("logrotate/includes/loaded");
 export const includedResourceChangedNotification: NotificationType<IncludedResourceChangedParams> =
   new NotificationType<IncludedResourceChangedParams>("logrotate/includes/changed");
+export const refreshDiagnosticsNotification: NotificationType<RefreshDiagnosticsParams> =
+  new NotificationType<RefreshDiagnosticsParams>("logrotate/diagnostics/refresh");
 export const detectedTargetVersionNotification: NotificationType<DetectedTargetVersionParams> =
   new NotificationType<DetectedTargetVersionParams>("logrotate/targetVersion/detected");

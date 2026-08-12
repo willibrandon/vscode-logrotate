@@ -442,8 +442,9 @@ decisions:
   that optional host-process validation is unavailable.
 - `capabilities.untrustedWorkspaces`: supported in limited mode; restrict the
   executable path and external-validation settings.
-- No explicit `activationEvents` are needed for contributed languages and
-  commands at this engine floor.
+- Contributed languages and commands need no explicit activation events at this engine floor.
+  `onStartupFinished` activates bounded content detection for already-open documents after the
+  workbench is ready; wildcard activation remains prohibited.
 - No wildcard `workspaceContains` activation.
 - No extension dependencies for shell syntax. Embed the standard `source.shell`
   scope and language mapping; gracefully retain logrotate coloring if a richer
@@ -461,9 +462,11 @@ Contribute narrow defaults:
 - state `firstLine` matching `^logrotate state -- version [12]$`.
 
 Do not claim generic `.conf`, `.status`, files named `status`, syslog output, cron
-files, or systemd units. README examples should show how users add unusual names
-with the built-in `files.associations` setting. This is clearer and safer than a
-custom suffix setting plus startup document reassignment.
+files, or systemd units by filename alone. For open documents, inspect only the bounded first line
+and reassign a competing language only when it is a complete absolute or tilde-prefixed log-path
+stanza or an exact state header. Do not scan the workspace. README examples should still show how
+users add unusual names that do not have a conclusive header with the built-in
+`files.associations` setting.
 
 ### 8.4 Markdown injection
 

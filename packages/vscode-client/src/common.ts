@@ -6,11 +6,14 @@ import {
   loadedIncludesNotification,
   readDirectoryRequest,
   readFileRequest,
+  refreshDiagnosticsNotification,
   statRequest,
 } from "@logrotate/language-server/protocol";
+import { detectLogrotateLanguage } from "./language-detection.js";
 
 export interface ClientRuntime {
   readonly client: BaseLanguageClient;
+  readonly fileUriCaseInsensitive?: boolean;
   readonly output: vscode.LogOutputChannel;
 }
 
@@ -94,6 +97,55 @@ export function registerFileSystemBridge(
   );
 }
 
+export function registerContentDetection(
+  context: vscode.ExtensionContext,
+  runtime: ClientRuntime,
+): void {
+  const pending = new Set<string>();
+  let disposed = false;
+
+  const detect = (document: vscode.TextDocument): void => {
+    if (
+      disposed ||
+      document.languageId === "logrotate" ||
+      document.languageId === "logrotate-state" ||
+      document.lineCount === 0
+    ) {
+      return;
+    }
+    const language = detectLogrotateLanguage(document.lineAt(0).text);
+    const uri = document.uri.toString();
+    if (language === undefined || pending.has(uri)) return;
+    pending.add(uri);
+    void Promise.resolve(vscode.languages.setTextDocumentLanguage(document, language))
+      .catch((error: unknown): void => {
+        runtime.output.warn(
+          `Unable to detect the Logrotate language from document content: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      })
+      .finally((): void => {
+        pending.delete(uri);
+      });
+  };
+
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument(detect),
+    vscode.workspace.onDidChangeTextDocument(({ document, contentChanges }): void => {
+      if (contentChanges.some(({ range }) => range.start.line === 0 || range.end.line === 0)) {
+        detect(document);
+      }
+    }),
+    {
+      dispose(): void {
+        if (disposed) return;
+        disposed = true;
+        pending.clear();
+      },
+    },
+  );
+  for (const document of vscode.workspace.textDocuments) detect(document);
+}
+
 export function registerLoadedIncludeSupport(
   context: vscode.ExtensionContext,
   runtime: ClientRuntime,
@@ -103,26 +155,53 @@ export function registerLoadedIncludeSupport(
     string,
     { readonly type: LoadedIncludeResource["type"]; readonly watcher: vscode.FileSystemWatcher }
   >();
+  const pendingLanguageAssignments = new Set<string>();
   let disposed = false;
 
+  const uriIdentity = (value: string): string => {
+    const uri = vscode.Uri.parse(value, true);
+    const normalized = uri.toString();
+    return runtime.fileUriCaseInsensitive && uri.scheme === "file"
+      ? normalized.toLowerCase()
+      : normalized;
+  };
+
   const isLoadedFile = (uri: string): boolean => {
+    const candidate = uriIdentity(uri);
     for (const resources of roots.values()) {
-      if (resources.get(uri) === "file") return true;
+      for (const [loadedUri, type] of resources) {
+        if (type === "file" && uriIdentity(loadedUri) === candidate) return true;
+      }
     }
     return false;
   };
 
   const assignLanguage = (document: vscode.TextDocument): void => {
-    if (disposed || document.languageId === "logrotate" || !isLoadedFile(document.uri.toString())) {
+    const uri = document.uri.toString();
+    const identity = uriIdentity(uri);
+    if (
+      disposed ||
+      document.languageId === "logrotate" ||
+      pendingLanguageAssignments.has(identity) ||
+      !isLoadedFile(uri)
+    ) {
       return;
     }
-    void Promise.resolve(vscode.languages.setTextDocumentLanguage(document, "logrotate")).catch(
-      (error: unknown): void => {
+    pendingLanguageAssignments.add(identity);
+    void (async (): Promise<void> => {
+      try {
+        const associated = await vscode.languages.setTextDocumentLanguage(document, "logrotate");
+        await runtime.client.sendNotification(refreshDiagnosticsNotification, {
+          uri: associated.uri.toString(),
+        });
+      } catch (error: unknown) {
         runtime.output.warn(
           `Unable to assign the Logrotate language to an included resource: ${error instanceof Error ? error.message : String(error)}`,
         );
-      },
-    );
+      } finally {
+        pendingLanguageAssignments.delete(identity);
+      }
+    })();
   };
 
   const reportChange = (uri: string): void => {
@@ -199,6 +278,7 @@ export function registerLoadedIncludeSupport(
         if (disposed) return;
         disposed = true;
         roots.clear();
+        pendingLanguageAssignments.clear();
         for (const { watcher } of watchers.values()) watcher.dispose();
         watchers.clear();
       },

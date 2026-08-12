@@ -5,6 +5,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-08-12
+
+### Fixed
+
+- Strong first-line content detection restores Logrotate when an already-open configuration has a
+  competing language association, including generic `.conf` files.
+- Included-file matching is case-insensitive on native Windows, and diagnostics refresh after VS
+  Code assigns the Logrotate language.
+- Desktop integration waits for a new diagnostic event in the active included editor. A workbench
+  smoke test opens `included.conf` directly, forces a competing language, and verifies the visible
+  LR1001 squiggle without navigation.
+
 ## [0.1.7] - 2026-08-12
 
 ### Fixed
@@ -13,8 +25,7 @@ All notable changes to this project are documented here. The format follows
   installation-feed propagation failures.
 - Native Windows verification uses Git for Windows Bash for workflow syntax checks and expects the
   platform's `NUL` device during installed-validator tests.
-- Files resolved through `include` are assigned the Logrotate language when opened, and their
-  diagnostics are republished immediately so editor squiggles appear without changing tabs.
+- Files resolved through `include` are assigned the Logrotate language when opened.
 - Native process-tree coverage is deterministic across Windows and Unix, successful web tests now
   end with an explicit confirmation, and `npm run test:vsix` builds its required package first.
 - The Remote SSH smoke test supports native Windows with Docker Desktop's Linux engine and uses
@@ -78,7 +89,8 @@ creation.
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.6
 [0.1.5]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.5

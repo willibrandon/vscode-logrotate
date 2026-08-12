@@ -4,6 +4,7 @@ import { basename, resolve } from "node:path";
 import { createVSIX } from "@vscode/vsce";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { prepareCycloneDxForAttestation } from "./release-sbom.mjs";
 
 const execute = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
@@ -53,6 +54,12 @@ await execute(
   ],
   { cwd: root },
 );
+const generatedSbom = JSON.parse(await readFile(sbom, "utf8"));
+const attestableSbom = prepareCycloneDxForAttestation(
+  generatedSbom,
+  `${manifest.publisher}.${manifest.name}@${manifest.version}:${sourceRevision}`,
+);
+await writeFile(sbom, `${JSON.stringify(attestableSbom, null, 2)}\n`, "utf8");
 const digest = createHash("sha256")
   .update(await readFile(vsix))
   .digest("hex");

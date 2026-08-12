@@ -1,12 +1,12 @@
 {
   "name": "@logrotate/vscode-client",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/common.ts"
   },
   "dependencies": {
-    "@logrotate/language-server": "0.1.4"
+    "@logrotate/language-server": "0.1.5"
   }
 }

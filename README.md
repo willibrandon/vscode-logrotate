@@ -3,9 +3,8 @@
 Language support for [logrotate](https://github.com/logrotate/logrotate) configuration and state
 files in Visual Studio Code desktop, remote, and web extension hosts.
 
-> [!IMPORTANT] This repository is under active development and is not published yet. The language
-> model is currently pinned to logrotate `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later
-> reviewed syntax).
+> [!IMPORTANT] Version 0.1.0 is an early public pre-release. The language model is currently pinned
+> to logrotate `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later reviewed syntax).
 
 ## Target 1.0 feature set
 
@@ -190,12 +189,10 @@ The complete product and technical rationale is in [docs/design.md](docs/design.
 
 ## Status and contributing
 
-The implementation is built phase by phase against the acceptance criteria in `docs/design.md`.
-Contributions should preserve browser/desktop parity, lossless script bodies, conservative
-diagnostics, bounded resource use, and generated language-data consistency. See
-[CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the
-[release checklist](docs/release-checklist.md).
+Version 0.1.0 begins the public pre-release period before stable 1.0. Contributions should preserve
+browser/desktop parity, lossless script bodies, conservative diagnostics, bounded resource use, and
+generated language-data consistency. See [CONTRIBUTING.md](CONTRIBUTING.md),
+[SECURITY.md](SECURITY.md), and the [release checklist](docs/release-checklist.md).
 
 This project is distributed under the [MIT License](LICENSE) and publishes as
-`willibrandon.logrotate`. Protected release rules and private reporting must be verified before the
-first public release.
+`willibrandon.logrotate`.

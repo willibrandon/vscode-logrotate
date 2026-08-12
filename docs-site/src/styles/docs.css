@@ -10,6 +10,12 @@
   --sl-color-accent-high: #082d52;
 }
 
+.sl-markdown-content
+  :not(h1, h2, h3, h4, h5, h6, .sl-heading-wrapper)
+  + .sl-heading-wrapper.level-h2 {
+  margin-top: 1.15em;
+}
+
 .sl-markdown-content img {
   border: 1px solid var(--sl-color-gray-5);
   border-radius: 0.5rem;

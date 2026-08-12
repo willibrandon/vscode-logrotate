@@ -9,7 +9,13 @@ interface ExpectedRelease {
 }
 
 interface MarketplaceReleaseModule {
+  isMarketplacePropagationError(error: unknown): boolean;
   isExpectedMarketplaceRelease(metadata: unknown, expected: ExpectedRelease): boolean;
+  waitForMarketplaceInstallation(options: {
+    readonly attempts: number;
+    readonly delay: () => Promise<void>;
+    readonly install: () => Promise<void>;
+  }): Promise<void>;
   waitForMarketplaceRelease(options: {
     readonly attempts: number;
     readonly delay: () => Promise<void>;
@@ -130,7 +136,81 @@ describe("Marketplace release verification", () => {
     expect(queries).toBe(3);
     expect(delays).toBe(2);
   });
+
+  it("retries installation while the published version propagates to the VS Code install feed", async () => {
+    let attempts = 0;
+    let delays = 0;
+
+    await release.waitForMarketplaceInstallation({
+      attempts: 4,
+      delay: () => {
+        delays += 1;
+        return Promise.resolve();
+      },
+      install: () => {
+        attempts += 1;
+        if (attempts < 3) {
+          return Promise.reject(
+            marketplaceInstallError("Extension 'willibrandon.logrotate@0.1.0' not found."),
+          );
+        }
+        return Promise.resolve();
+      },
+    });
+
+    expect(attempts).toBe(3);
+    expect(delays).toBe(2);
+  });
+
+  it("does not retry installation or activation failures unrelated to propagation", async () => {
+    let attempts = 0;
+    let delays = 0;
+    const activationFailure = new Error("Installed-extension smoke test exited with code 1.");
+
+    await expect(
+      release.waitForMarketplaceInstallation({
+        attempts: 4,
+        delay: () => {
+          delays += 1;
+          return Promise.resolve();
+        },
+        install: () => {
+          attempts += 1;
+          return Promise.reject(activationFailure);
+        },
+      }),
+    ).rejects.toBe(activationFailure);
+
+    expect(attempts).toBe(1);
+    expect(delays).toBe(0);
+  });
+
+  it("stops installation retries at the configured bound", async () => {
+    let attempts = 0;
+    const propagationFailure = marketplaceInstallError(
+      "Extension 'willibrandon.logrotate@0.1.0' not found.",
+    );
+
+    await expect(
+      release.waitForMarketplaceInstallation({
+        attempts: 2,
+        delay: () => Promise.resolve(),
+        install: () => {
+          attempts += 1;
+          return Promise.reject(propagationFailure);
+        },
+      }),
+    ).rejects.toMatchObject({
+      message: "Marketplace installation verification failed after 2 attempts.",
+      cause: propagationFailure,
+    });
+    expect(attempts).toBe(2);
+  });
 });
+
+function marketplaceInstallError(stderr: string): Error & { readonly stderr: string } {
+  return Object.assign(new Error("VS Code extension installation failed."), { stderr });
+}
 
 function marketplaceMetadata(
   publisher: string,

@@ -69,6 +69,32 @@ export async function waitForMarketplaceRelease(options) {
   );
 }
 
+export async function waitForMarketplaceInstallation(options) {
+  const { attempts, delay, install } = options;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await install();
+    } catch (error) {
+      if (!isMarketplacePropagationError(error)) throw error;
+      lastError = error;
+    }
+    if (attempt < attempts) await delay();
+  }
+  throw new Error(
+    `Marketplace installation verification failed after ${attempts} attempt${attempts === 1 ? "" : "s"}.`,
+    { cause: lastError },
+  );
+}
+
+export function isMarketplacePropagationError(error) {
+  if (typeof error !== "object" || error === null) return false;
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  const stderr = "stderr" in error && typeof error.stderr === "string" ? error.stderr : "";
+  const output = `${message}\n${stderr}`;
+  return /Extension '[^']+' not found\./u.test(output);
+}
+
 async function queryMarketplace(extensionId) {
   const vsce = resolve(root, "node_modules/@vscode/vsce/vsce");
   const { stdout } = await execute(process.execPath, [vsce, "show", extensionId, "--json"], {
@@ -103,11 +129,12 @@ async function verifyMarketplaceRelease() {
   const extensionId = `${expected.publisher}.${expected.name}`;
   const attempts = positiveInteger(process.env.MARKETPLACE_VERIFY_ATTEMPTS, 20);
   const interval = positiveInteger(process.env.MARKETPLACE_VERIFY_INTERVAL_MS, 30_000);
+  const delay = async () =>
+    new Promise((resolvePromise) => globalThis.setTimeout(resolvePromise, interval));
 
   await waitForMarketplaceRelease({
     attempts,
-    delay: async () =>
-      new Promise((resolvePromise) => globalThis.setTimeout(resolvePromise, interval)),
+    delay,
     expected,
     query: async () => queryMarketplace(extensionId),
   });
@@ -117,14 +144,19 @@ async function verifyMarketplaceRelease() {
   const userDataDirectory = resolve(temporaryRoot, "user-data");
   await Promise.all([mkdir(extensionsDirectory), mkdir(userDataDirectory)]);
   try {
-    await runInstalledDesktopSmoke({
-      expectedIdentity: `${extensionId}@${expected.version}`,
-      extensionsDirectory,
-      installTarget: `${extensionId}@${expected.version}`,
-      preRelease: expected.preRelease,
-      root,
-      userDataDirectory,
-      version: "stable",
+    await waitForMarketplaceInstallation({
+      attempts,
+      delay,
+      install: async () =>
+        runInstalledDesktopSmoke({
+          expectedIdentity: `${extensionId}@${expected.version}`,
+          extensionsDirectory,
+          installTarget: `${extensionId}@${expected.version}`,
+          preRelease: expected.preRelease,
+          root,
+          userDataDirectory,
+          version: "stable",
+        }),
     });
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });

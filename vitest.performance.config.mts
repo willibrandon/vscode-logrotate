@@ -3,7 +3,7 @@ import { defineConfig, type ViteUserConfig } from "vitest/config";
 const config: ViteUserConfig = defineConfig({
   test: {
     environment: "node",
-    include: ["test/performance/**/*.bench.ts"],
+    include: ["test/performance/**/*.bench.ts", "packages/**/test/*.bench.ts"],
     testTimeout: 30_000,
     restoreMocks: true,
     fileParallelism: false,

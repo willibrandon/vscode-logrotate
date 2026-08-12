@@ -130,6 +130,32 @@ describe("shared language server contract", () => {
     });
   });
 
+  it("applies incremental document changes before reanalysis", async () => {
+    harness = await createServerHarness();
+    await harness.open(uri, "logrotate", "rotate nope\n", 1);
+    await harness.waitForDiagnostics(
+      uri,
+      (diagnostics, publication) =>
+        publication.version === 1 && diagnostics.some(({ code }) => code === "LR1104"),
+    );
+
+    await harness.changeIncremental(
+      uri,
+      {
+        start: { line: 0, character: "rotate ".length },
+        end: { line: 0, character: "rotate nope".length },
+      },
+      "4",
+      2,
+    );
+    const publication = await harness.waitForDiagnostics(
+      uri,
+      (diagnostics, current) => current.version === 2 && diagnostics.length === 0,
+    );
+
+    expect(publication).toMatchObject({ uri, version: 2, diagnostics: [] });
+  });
+
   it("offers state-aware directives, arguments, paths, and no logrotate items in shell bodies", async () => {
     harness = await createServerHarness({
       "file:///workspace": { entries: ["logrotate.d", "logs"] },

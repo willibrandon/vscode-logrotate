@@ -9,10 +9,12 @@ import type {
   InitializeResult,
   LogMessageParams,
   PublishDiagnosticsParams,
+  Range,
 } from "vscode-languageserver";
 import { createMessageConnection } from "vscode-jsonrpc/node";
 import type { MessageConnection } from "vscode-jsonrpc/node";
 import { startLanguageServer } from "../src/server.js";
+import type { TimerHost } from "../src/server.js";
 import {
   loadedIncludesNotification,
   readDirectoryRequest,
@@ -32,7 +34,10 @@ interface TestFile {
 
 interface DiagnosticWaiter {
   readonly uri: string;
-  readonly predicate: (diagnostics: readonly Diagnostic[]) => boolean;
+  readonly predicate: (
+    diagnostics: readonly Diagnostic[],
+    publication: PublishDiagnosticsParams,
+  ) => boolean;
   readonly resolve: (params: PublishDiagnosticsParams) => void;
 }
 
@@ -52,11 +57,15 @@ export interface ServerHarness {
   readonly initializeResult: InitializeResult;
   open(uri: string, languageId: string, text: string, version?: number): Promise<void>;
   change(uri: string, text: string, version: number): Promise<void>;
+  changeIncremental(uri: string, range: Range, text: string, version: number): Promise<void>;
   configure(settings: unknown): Promise<void>;
   close(uri: string): Promise<void>;
   waitForDiagnostics(
     uri: string,
-    predicate?: (diagnostics: readonly Diagnostic[]) => boolean,
+    predicate?: (
+      diagnostics: readonly Diagnostic[],
+      publication: PublishDiagnosticsParams,
+    ) => boolean,
   ): Promise<PublishDiagnosticsParams>;
   logMessages(): readonly LogMessageParams[];
   waitForLog(predicate: (message: LogMessageParams) => boolean): Promise<LogMessageParams>;
@@ -71,6 +80,7 @@ export interface ServerHarness {
 
 export async function createServerHarness(
   files: Readonly<Record<string, TestFile>> = {},
+  timers: TimerHost = fastTimers,
 ): Promise<ServerHarness> {
   const clientToServer = new PassThrough();
   const serverToClient = new PassThrough();
@@ -96,7 +106,7 @@ export async function createServerHarness(
       published.set(params.uri, params);
       for (let index = waiters.length - 1; index >= 0; index -= 1) {
         const waiter = waiters[index];
-        if (waiter?.uri === params.uri && waiter.predicate(params.diagnostics)) {
+        if (waiter?.uri === params.uri && waiter.predicate(params.diagnostics, params)) {
           waiters.splice(index, 1);
           waiter.resolve(params);
         }
@@ -150,14 +160,7 @@ export async function createServerHarness(
     };
   });
   client.listen();
-  startLanguageServer(server, {
-    setTimeout(callback): ReturnType<typeof setTimeout> {
-      return setTimeout(callback, 1);
-    },
-    clearTimeout(handle): void {
-      clearTimeout(handle as ReturnType<typeof setTimeout>);
-    },
-  });
+  startLanguageServer(server, timers);
 
   const initializeResult = await client.sendRequest<InitializeResult>("initialize", {
     processId: null,
@@ -180,6 +183,12 @@ export async function createServerHarness(
         contentChanges: [{ text }],
       });
     },
+    async changeIncremental(uri, range, text, version): Promise<void> {
+      await client.sendNotification("textDocument/didChange", {
+        textDocument: { uri, version },
+        contentChanges: [{ range, text }],
+      });
+    },
     async configure(settings): Promise<void> {
       await client.sendNotification("workspace/didChangeConfiguration", { settings });
     },
@@ -188,7 +197,9 @@ export async function createServerHarness(
     },
     waitForDiagnostics(uri, predicate = () => true): Promise<PublishDiagnosticsParams> {
       const current = published.get(uri);
-      if (current !== undefined && predicate(current.diagnostics)) return Promise.resolve(current);
+      if (current !== undefined && predicate(current.diagnostics, current)) {
+        return Promise.resolve(current);
+      }
       return new Promise((resolvePromise, rejectPromise): void => {
         const waiter = { uri, predicate, resolve: resolvePromise };
         waiters.push(waiter);
@@ -246,3 +257,12 @@ export async function createServerHarness(
     },
   };
 }
+
+const fastTimers: TimerHost = {
+  setTimeout(callback): ReturnType<typeof setTimeout> {
+    return setTimeout(callback, 1);
+  },
+  clearTimeout(handle): void {
+    clearTimeout(handle as ReturnType<typeof setTimeout>);
+  },
+};

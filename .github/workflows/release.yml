@@ -26,12 +26,20 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check out pinned logrotate oracle
+      - name: Check out pinned logrotate corpus
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: logrotate/logrotate
           ref: 3be1e9ccffe0c2245ed596183c74913d553f9f18
           path: .upstream
+          persist-credentials: false
+      - name: Check out supported logrotate 3.22.0 validation oracle
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: logrotate/logrotate
+          ref: 41efb71b765b08e53e2c411e0a2897d30f44eefc
+          path: .logrotate-3.22
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -43,7 +51,7 @@ jobs:
         env:
           LOGROTATE_SOURCE: ${{ github.workspace }}/.upstream
       - name: Build the supported logrotate 3.22 validation oracle
-        working-directory: .upstream
+        working-directory: .logrotate-3.22
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends automake libacl1-dev libpopt-dev libselinux1-dev
@@ -53,7 +61,7 @@ jobs:
       - name: Exercise non-mutating installed validation
         run: npm run test:installed-logrotate
         env:
-          LOGROTATE_EXECUTABLE: ${{ github.workspace }}/.upstream/logrotate
+          LOGROTATE_EXECUTABLE: ${{ github.workspace }}/.logrotate-3.22/logrotate
           LOGROTATE_EXPECTED_VERSION: "3.22"
       - name: Check tag, changelog, tree, and publisher identity
         run: node ./scripts/check-release.mjs

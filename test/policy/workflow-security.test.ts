@@ -93,6 +93,26 @@ describe("workflow supply-chain policy", () => {
     expect(remoteRunner).not.toContain("secrets.");
   });
 
+  it("builds the pinned stable validation oracle with its signed version tag available", () => {
+    const release = workflow("release.yml");
+    const checkout =
+      /- name: Check out supported logrotate 3\.22\.0 validation oracle[\s\S]*?(?=\n {6}- name:)/u.exec(
+        release,
+      )?.[0];
+
+    expect(checkout).toBeDefined();
+    expect(checkout).toContain("repository: logrotate/logrotate");
+    expect(checkout).toContain("ref: 41efb71b765b08e53e2c411e0a2897d30f44eefc");
+    expect(checkout).toContain("path: .logrotate-3.22");
+    expect(checkout).toContain("fetch-depth: 0");
+    expect(checkout).toContain("persist-credentials: false");
+    expect(release).toContain("working-directory: .logrotate-3.22");
+    expect(release).toContain(
+      "LOGROTATE_EXECUTABLE: ${{ github.workspace }}/.logrotate-3.22/logrotate",
+    );
+    expect(release).toContain("LOGROTATE_SOURCE: ${{ github.workspace }}/.upstream");
+  });
+
   it("publishes one checked and attested VSIX through narrowly scoped credentials", async () => {
     const release = workflow("release.yml");
     const installedValidation = await readFile(

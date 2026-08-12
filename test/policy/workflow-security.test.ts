@@ -17,6 +17,17 @@ const workflows = new Map(
   ),
 );
 
+interface ReleaseWorkflow {
+  readonly jobs?: {
+    readonly release?: {
+      readonly steps?: readonly {
+        readonly name?: unknown;
+        readonly run?: unknown;
+      }[];
+    };
+  };
+}
+
 function workflow(name: string): string {
   const contents = workflows.get(name);
   if (contents === undefined) throw new Error(`Missing workflow ${name}`);
@@ -126,18 +137,33 @@ describe("workflow supply-chain policy", () => {
     expect(prettierIgnore.split("\n")).toContain(".logrotate-3.22");
   });
 
-  it("keeps release metadata shell syntax valid", () => {
+  it("keeps release shell syntax valid", () => {
     const release = workflow("release.yml");
-    const script =
-      /- name: Record immutable artifact paths\n\s+run: \|\n(?<body>(?: {10}.*\n)+)/u.exec(release)
-        ?.groups?.["body"];
+    const document = parseDocument(release).toJS() as ReleaseWorkflow;
+    const shellSteps =
+      document.jobs?.release?.steps?.filter(
+        (step): step is { readonly name?: unknown; readonly run: string } =>
+          typeof step.run === "string",
+      ) ?? [];
 
-    expect(script).toBeDefined();
-    const shellCheck = spawnSync("bash", ["-n"], {
-      input: script?.replace(/^ {10}/gmu, ""),
-      encoding: "utf8",
-    });
-    expect(shellCheck.status, shellCheck.stderr).toBe(0);
+    expect(shellSteps.length).toBeGreaterThan(0);
+    for (const step of shellSteps) {
+      const shellCheck = spawnSync("bash", ["-n"], { input: step.run, encoding: "utf8" });
+      expect(shellCheck.status, `${String(step.name)}: ${shellCheck.stderr}`).toBe(0);
+    }
+  });
+
+  it("gives release attestation bundles distinct asset names", () => {
+    const release = workflow("release.yml");
+
+    expect(release).toContain('PROVENANCE_ASSET="dist/logrotate-$VERSION.provenance.json"');
+    expect(release).toContain(
+      'SBOM_ATTESTATION_ASSET="dist/logrotate-$VERSION.sbom-attestation.json"',
+    );
+    expect(release).toContain('cp -- "$PROVENANCE_BUNDLE" "$PROVENANCE_ASSET"');
+    expect(release).toContain('cp -- "$SBOM_BUNDLE" "$SBOM_ATTESTATION_ASSET"');
+    expect(release).toContain('"$PROVENANCE_ASSET" "$SBOM_ATTESTATION_ASSET"');
+    expect(release).not.toContain('"$PROVENANCE_BUNDLE" "$SBOM_BUNDLE"');
   });
 
   it("publishes one checked and attested VSIX through narrowly scoped credentials", async () => {

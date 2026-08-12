@@ -104,8 +104,12 @@ jobs:
         run: |
           PRERELEASE_FLAG=()
           if [[ "$PRERELEASE" == "true" ]]; then PRERELEASE_FLAG+=(--prerelease); fi
+          PROVENANCE_ASSET="dist/logrotate-$VERSION.provenance.json"
+          SBOM_ATTESTATION_ASSET="dist/logrotate-$VERSION.sbom-attestation.json"
+          cp -- "$PROVENANCE_BUNDLE" "$PROVENANCE_ASSET"
+          cp -- "$SBOM_BUNDLE" "$SBOM_ATTESTATION_ASSET"
           gh release create "$GITHUB_REF_NAME" \
-            "$VSIX_PATH" "$CHECKSUM_PATH" "$SBOM_PATH" "$PROVENANCE_BUNDLE" "$SBOM_BUNDLE" \
+            "$VSIX_PATH" "$CHECKSUM_PATH" "$SBOM_PATH" "$PROVENANCE_ASSET" "$SBOM_ATTESTATION_ASSET" \
             --draft --verify-tag --title "Logrotate $VERSION" --notes-from-tag "${PRERELEASE_FLAG[@]}"
       - name: Publish the exact VSIX to Visual Studio Marketplace
         env:

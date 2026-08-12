@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.1.5] - 2026-08-12
+## [0.1.6] - 2026-08-12
 
 ### Added
 
@@ -31,6 +31,12 @@ All notable changes to this project are documented here. The format follows
   publishing.
 - Reproducible CycloneDX output includes a deterministic RFC 4122 serial number accepted by GitHub
   SBOM attestation.
+- Provenance and SBOM attestation bundles use distinct release asset names.
+
+## [0.1.5] - 2026-08-12
+
+No artifacts were published. Release automation stopped while assembling the draft GitHub release;
+the partial draft was removed before Marketplace publishing.
 
 ## [0.1.4] - 2026-08-12
 
@@ -57,7 +63,8 @@ creation.
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.6
 [0.1.5]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.5
 [0.1.4]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.4
 [0.1.3]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.3

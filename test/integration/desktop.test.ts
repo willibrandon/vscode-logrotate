@@ -25,7 +25,7 @@ suite("Logrotate desktop extension", () => {
 
     const installedPathPrefix = process.env["EXPECTED_INSTALLED_EXTENSION_PATH_PREFIX"];
     if (installedPathPrefix !== undefined) {
-      assert.equal(manifest.version, "0.1.0");
+      assert.equal(manifest.version, "0.1.1");
       assert.ok(
         extension.extensionPath.startsWith(installedPathPrefix),
         `expected packaged extension under ${installedPathPrefix}, received ${extension.extensionPath}`,

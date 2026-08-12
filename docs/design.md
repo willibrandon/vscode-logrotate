@@ -1162,7 +1162,7 @@ Ship and maintain:
 - `CONTRIBUTING.md`: reproducible setup, generation, test tiers, directive-data
   review, and upstream drift workflow;
 - `SECURITY.md`: private vulnerability reporting and support window;
-- `SUPPORT.md`, code of conduct, license, and third-party notices;
+- `SUPPORT.md`, license, and third-party notices;
 - architecture and grammar notes explaining parser differences from generic
   key/value syntax;
 - localization metadata for manifest strings and user-facing commands/settings.

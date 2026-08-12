@@ -63,24 +63,51 @@ describe("workflow supply-chain policy", () => {
     }
   });
 
-  it("tests the declared editor matrix, browser host, pinned oracle, and Insiders warning", () => {
+  it("tests the declared editor matrix, browser and remote hosts, pinned oracle, and Insiders warning", async () => {
     const ci = workflow("ci.yml");
+    const remoteDockerfile = await readFile(resolve(root, "test/remote/Dockerfile"), "utf8");
+    const remoteRunner = await readFile(resolve(root, "scripts/run-remote-ssh-smoke.mjs"), "utf8");
     expect(ci).toContain("os: [ubuntu-latest, macos-latest, windows-latest]");
     expect(ci).toContain("vscode: [1.102.0, stable]");
     expect(ci).toContain("npm run test:web");
     expect(ci).toContain("npm run test:vsix");
     expect(ci).toContain("dist/test/desktop/extension.test.cjs");
     expect(ci).toContain("dist/test/web/index.cjs");
+    expect(ci).toMatch(/remote_ssh:[\s\S]*name: Remote SSH host[\s\S]*needs: package/u);
+    expect(ci).toContain("npm run test:remote");
+    expect(ci).toContain("name: remote-ssh-smoke");
     expect(ci).toContain("ref: 3be1e9ccffe0c2245ed596183c74913d553f9f18");
     expect(ci).toMatch(/insiders:[\s\S]*continue-on-error: true/u);
+    expect(remoteDockerfile).toMatch(/^FROM debian:trixie-slim@sha256:[0-9a-f]{64}$/mu);
+    expect(remoteRunner).toContain('"ssh-remote"');
+    expect(remoteRunner).toContain("expectedRemoteExtensionPath");
+    expect(remoteRunner).toContain("/dist/nodeServer.cjs");
+    expect(remoteRunner).toContain("[logrotate 3.22.0 on this host]");
+    expect(remoteRunner).not.toContain("secrets.");
   });
 
-  it("publishes one checked and attested VSIX through narrowly scoped credentials", () => {
+  it("publishes one checked and attested VSIX through narrowly scoped credentials", async () => {
     const release = workflow("release.yml");
+    const installedValidation = await readFile(
+      resolve(root, "scripts/check-installed-logrotate.mjs"),
+      "utf8",
+    );
+    const marketplaceVerifier = await readFile(
+      resolve(root, "scripts/verify-marketplace-release.mjs"),
+      "utf8",
+    );
     expect(release).toContain("node ./scripts/check-release.mjs");
+    expect(release).toContain("npm run test:installed-logrotate");
+    expect(release).toContain('LOGROTATE_EXPECTED_VERSION: "3.22"');
+    expect(installedValidation).toContain('["--debug", "--state", "/dev/null", configPath]');
+    expect(installedValidation).not.toMatch(/shell\s*:/u);
     expect(release).toContain("subject-path: ${{ env.VSIX_PATH }}");
     expect(release).toContain("sbom-path: ${{ env.SBOM_PATH }}");
+    expect(release).toContain("npx vsce verify-pat willibrandon");
     expect(release).toContain('npx vsce publish --packagePath "$VSIX_PATH" --no-dependencies');
+    expect(release).toContain("npm run verify:marketplace");
+    expect(marketplaceVerifier).toContain("Microsoft.VisualStudio.Services.VsixSha256");
+    expect(marketplaceVerifier).toContain('createHash("sha256")');
     expect(release).toContain("Number(require('./package.json').version.split('.')[1]) % 2 === 1");
     expect(release.match(/PRERELEASE_FLAG\+?=\(\)|PRERELEASE_FLAG=\(\)/gu)).toHaveLength(2);
     expect(release.match(/PRERELEASE_FLAG\+?=\(--pre-release\)/gu)).toHaveLength(1);
@@ -88,7 +115,12 @@ describe("workflow supply-chain policy", () => {
     expect(release).toContain('"$VSIX_PATH" "$CHECKSUM_PATH" "$SBOM_PATH"');
     expect(release).toContain("VSCE_PAT: ${{ secrets.VSCE_PAT }}");
     expect(release).not.toMatch(/OVSX|--oidc/u);
-    expect(release.indexOf("gh release edit")).toBeGreaterThan(release.indexOf("npx vsce publish"));
+    const marketplacePublish = release.indexOf("npx vsce publish");
+    const marketplaceVerification = release.indexOf("npm run verify:marketplace");
+    const githubPublication = release.indexOf('gh release edit "$GITHUB_REF_NAME" --draft=false');
+    expect(marketplacePublish).toBeGreaterThan(-1);
+    expect(marketplaceVerification).toBeGreaterThan(marketplacePublish);
+    expect(githubPublication).toBeGreaterThan(marketplaceVerification);
   });
 
   it("keeps scheduled drift detection review-only", () => {

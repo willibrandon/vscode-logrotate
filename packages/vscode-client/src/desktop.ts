@@ -15,6 +15,7 @@ import {
 } from "./external-validation-policy.js";
 import {
   detectInstalledLogrotateVersion,
+  externalValidationSummary,
   NodeProcessHost,
   validateWithInstalledLogrotate,
 } from "./external-validator.js";
@@ -239,17 +240,7 @@ function diagnosticsFromOutput(
   result: Awaited<ReturnType<typeof validateWithInstalledLogrotate>>,
 ): vscode.Diagnostic[] {
   if (result.exitCode === 0 && !result.timedOut && !result.truncated) return [];
-  const output = `${result.stderr}\n${result.stdout}`.trim();
-  const firstLine = output
-    .split(/\r\n|\n|\r/u)
-    .find((line) => /error|warning/u.test(line.toLowerCase()));
-  const message = result.timedOut
-    ? "Installed logrotate validation timed out."
-    : result.truncated
-      ? "Installed logrotate validation exceeded its output limit."
-      : safeMessage(
-          firstLine ?? `Installed logrotate exited with code ${result.exitCode ?? "unknown"}.`,
-        );
+  const message = safeMessage(externalValidationSummary(result));
   const diagnostic = new vscode.Diagnostic(
     new vscode.Range(0, 0, 0, Math.max(1, document.lineAt(0).text.length)),
     `[logrotate ${result.version} on this host] ${message}`,

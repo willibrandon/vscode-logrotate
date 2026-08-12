@@ -48,6 +48,22 @@ export interface ExternalValidationOptions {
   readonly isTrusted?: () => boolean;
 }
 
+export function externalValidationSummary(result: ExternalValidationResult): string {
+  if (result.timedOut) return "Installed logrotate validation timed out.";
+  if (result.truncated) return "Installed logrotate validation exceeded its output limit.";
+  const output = `${result.stderr}\n${result.stdout}`.trim();
+  const firstActionableLine = output
+    .split(/\r\n|\n|\r/u)
+    .find(
+      (line) =>
+        /error|warning/iu.test(line) &&
+        !/warning:\s*logrotate in debug mode does nothing/iu.test(line),
+    );
+  return (
+    firstActionableLine ?? `Installed logrotate exited with code ${result.exitCode ?? "unknown"}.`
+  );
+}
+
 const defaultLimits: ProcessLimits = {
   timeoutMilliseconds: 10_000,
   maxOutputBytes: 256 * 1024,

@@ -4,7 +4,6 @@ import * as vscode from "vscode";
 const extensionId = "willibrandon.logrotate";
 
 interface ExtensionManifest {
-  readonly author: { readonly name: string };
   readonly browser: string;
   readonly license: string;
   readonly main: string;
@@ -23,7 +22,6 @@ suite("Logrotate desktop extension", () => {
     assert.equal(manifest.main, "./dist/extension.cjs");
     assert.equal(manifest.browser, "./dist/browser.js");
     assert.equal(manifest.license, "MIT");
-    assert.equal(manifest.author.name, "Brandon Williams");
 
     const installedPathPrefix = process.env["EXPECTED_INSTALLED_EXTENSION_PATH_PREFIX"];
     if (installedPathPrefix !== undefined) {

@@ -45,4 +45,21 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ["**/*.cjs"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        exports: "readonly",
+        process: "readonly",
+        require: "readonly",
+        setTimeout: "readonly",
+      },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
 );

@@ -15,7 +15,7 @@ jobs:
   release:
     environment: release
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       attestations: write
       contents: write
@@ -42,8 +42,30 @@ jobs:
         run: npm run verify
         env:
           LOGROTATE_SOURCE: ${{ github.workspace }}/.upstream
+      - name: Build the supported logrotate 3.22 validation oracle
+        working-directory: .upstream
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends automake libacl1-dev libpopt-dev libselinux1-dev
+          autoreconf -fiv
+          ./configure --disable-silent-rules
+          make -j2
+      - name: Exercise non-mutating installed validation
+        run: npm run test:installed-logrotate
+        env:
+          LOGROTATE_EXECUTABLE: ${{ github.workspace }}/.upstream/logrotate
+          LOGROTATE_EXPECTED_VERSION: "3.22"
       - name: Check tag, changelog, tree, and publisher identity
         run: node ./scripts/check-release.mjs
+      - name: Verify Marketplace publisher access
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [[ -z "$VSCE_PAT" ]]; then
+            echo "The VSCE_PAT repository or release-environment secret is required." >&2
+            exit 1
+          fi
+          npx vsce verify-pat willibrandon
       - name: Build the release artifacts once
         run: npm run package
       - name: Record immutable artifact paths
@@ -87,6 +109,8 @@ jobs:
           PRERELEASE_FLAG=()
           if [[ "$PRERELEASE" == "true" ]]; then PRERELEASE_FLAG+=(--pre-release); fi
           npx vsce publish --packagePath "$VSIX_PATH" --no-dependencies "${PRERELEASE_FLAG[@]}"
+      - name: Verify Marketplace propagation, installation, and activation
+        run: npm run verify:marketplace
       - name: Publish the GitHub release after the Marketplace succeeds
         env:
           GH_TOKEN: ${{ github.token }}

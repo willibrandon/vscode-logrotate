@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   detectInstalledLogrotateVersion,
+  externalValidationSummary,
   NodeProcessHost,
   validateWithInstalledLogrotate,
   type ProcessHost,
@@ -123,6 +124,21 @@ describe("installed logrotate validator", () => {
     });
     expect(result.version).toBe("unknown");
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports the first actionable host warning instead of logrotate's debug-mode notice", () => {
+    expect(
+      externalValidationSummary({
+        ...success,
+        version: "3.22.0",
+        exitCode: 1,
+        stderr: [
+          "warning: logrotate in debug mode does nothing except printing debug messages!",
+          "warning: included.conf:2 unknown option 'rotote' -- ignoring line",
+          "error: stat of /var/log/included.log failed: No such file or directory",
+        ].join("\n"),
+      }),
+    ).toBe("warning: included.conf:2 unknown option 'rotote' -- ignoring line");
   });
 
   it("forwards a live cancellation signal to both process invocations", async () => {

@@ -140,6 +140,7 @@ Requirements:
 - npm 11 (the exact package manager version is recorded in `package.json`)
 - Chromium and Xvfb for web and headless desktop integration tests
 - logrotate 3.22 or later for optional differential and installed-tool tests
+- Docker and OpenSSH for the isolated Remote SSH smoke test
 
 ```sh
 nvm use
@@ -159,6 +160,8 @@ npm run test:grammar
 npm run test:lsp
 npm run test:integration
 npm run test:web
+npm run test:vsix
+npm run test:remote
 npm run capture:themes
 npm run build
 npm run package
@@ -193,6 +196,6 @@ diagnostics, bounded resource use, and generated language-data consistency. See
 [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the
 [release checklist](docs/release-checklist.md).
 
-This project is distributed under the [MIT License](LICENSE) by Brandon Williams and publishes as
+This project is distributed under the [MIT License](LICENSE) and publishes as
 `willibrandon.logrotate`. Protected release rules and private reporting must be verified before the
 first public release.

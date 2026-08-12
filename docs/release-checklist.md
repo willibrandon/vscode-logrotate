@@ -5,10 +5,10 @@ No release is authorized until every item has evidence. The package identity is
 
 ## External ownership blockers
 
-- [x] Confirm Brandon Williams as the maintainer and `willibrandon` as the publisher ID.
+- [x] Confirm `willibrandon` as the publisher ID.
 - [x] Verify the public GitHub repository and protected `main`/`v*` tag rules.
 - [x] Verify the `willibrandon` Marketplace publisher and configured `VSCE_PAT` release secret.
-- [x] Enable GitHub private vulnerability reporting and publish the .NET conduct policy.
+- [x] Enable GitHub private vulnerability reporting.
 - [x] Confirm the MIT license and independently authored boundary remain intact.
 
 ## Candidate evidence
@@ -26,7 +26,13 @@ No release is authorized until every item has evidence. The package identity is
 - [ ] Marketplace and GitHub consumed the same checksum-addressed VSIX bytes.
 - [ ] Offline install and first activation were verified from the attached artifact.
 - [ ] Stable/pre-release channel and installed-validation default (`off`) were checked.
+- [x] Remote extension-host placement and executable locality have automated SSH evidence plus a
+      dated WSL review in [remote-smoke.md](remote-smoke.md).
 - [ ] A post-release Marketplace installation was verified before announcement.
+
+The release job verifies publisher access before building, waits for the exact version and channel
+to appear in Marketplace metadata, installs that Marketplace version into a clean VS Code profile,
+and runs the desktop activation suite before it makes the GitHub release public.
 
 The release workflow enforces machine-checkable preconditions. Store identities, environment
 protection rules, contacts, and final governance remain human approvals and cannot be inferred by

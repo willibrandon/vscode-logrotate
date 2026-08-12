@@ -423,9 +423,9 @@ The repository is public and the Visual Studio Marketplace publisher is
 | State scope | `source.logrotate.state` |
 | Configuration prefix | `logrotate` |
 
-Ship the reviewed `media/icon.png`: a high-contrast log document and rotation
-arrow that remains legible at small size and on light and dark Marketplace
-surfaces.
+Ship the reviewed `media/icon.png`: one high-contrast rotation arrow around
+three log lines on a full-bleed blue background. The simple mark remains legible
+at small size and has no transparent or dark outer corners.
 
 ### 8.2 Manifest outline
 

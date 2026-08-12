@@ -9,6 +9,8 @@ All notable changes to this project are documented here. The format follows
 
 - Marketplace release verification now waits for service validation and retries only transient
   installation-feed propagation failures.
+- Native Windows verification uses Git for Windows Bash for workflow syntax checks and expects the
+  platform's `NUL` device during installed-validator tests.
 
 ## [0.1.6] - 2026-08-12
 

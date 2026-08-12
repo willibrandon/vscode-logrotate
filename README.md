@@ -23,6 +23,14 @@ files in Visual Studio Code desktop, remote, and web extension hosts.
 The extension never executes `prerotate`, `postrotate`, `firstaction`, `lastaction`, or `preremove`
 scripts. Its formatter preserves the raw bytes of script bodies and does not reorder directives.
 
+## Preview
+
+![Logrotate highlighting in VS Code Dark+](docs/images/dark-plus.png)
+
+The grammar uses standard, theme-neutral TextMate scopes. The reproducible
+[theme smoke check](docs/theme-smoke.md) also covers high contrast and three popular third-party
+themes.
+
 ## Recognized files
 
 The extension intentionally uses narrow defaults:
@@ -77,6 +85,17 @@ The `auto` target runs only `logrotate --version`, and only in a trusted local d
 host. Browser, virtual, untrusted, unavailable, failed, or unsupported detections safely use the
 latest reviewed language model instead.
 
+## Supported logrotate versions
+
+| Target   | Built-in language model                                                     |
+| -------- | --------------------------------------------------------------------------- |
+| `latest` | Newest reviewed syntax; currently logrotate 3.22.                           |
+| `auto`   | Detect 3.22 on an eligible host, otherwise safely use the `latest` model.   |
+| `3.22`   | Pin diagnostics and completion to the reviewed logrotate 3.22 syntax model. |
+
+Installed validation is optional and may run against a newer host binary, but its findings remain
+clearly labeled as host-specific and never replace the built-in parser or formatter.
+
 ## Commands
 
 - **Logrotate: Validate Current File with Installed Logrotate**
@@ -100,6 +119,18 @@ retain internal language features but cannot run a host executable.
 
 Version 1 has no telemetry and makes no runtime network requests. Documentation links open only
 after an explicit user action.
+
+## Troubleshooting
+
+- If an unusual filename is plain text, confirm the language mode in the status bar and add the
+  narrow `files.associations` entry shown above. The extension never forces language reassignment.
+- Run **Logrotate: Show Language Server Output** to inspect sanitized startup, analysis, and failure
+  logs. Enable `logrotate.trace.server` only temporarily because protocol traces can include text.
+- Run **Logrotate: Restart Language Server** after changing extension-host or remote filesystem
+  state. Restarting disposes the previous server and loaded-resource watchers first.
+- If installed validation is unavailable, save the file and confirm that it is a local `file:` URI,
+  the workspace is trusted, the desktop host can find `logrotate`, and validation is enabled.
+  Browser and virtual workspaces intentionally cannot start it.
 
 ## Development
 
@@ -128,6 +159,7 @@ npm run test:grammar
 npm run test:lsp
 npm run test:integration
 npm run test:web
+npm run capture:themes
 npm run build
 npm run package
 ```

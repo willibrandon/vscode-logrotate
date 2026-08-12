@@ -73,7 +73,7 @@ describe("extension manifest", () => {
       main: "./dist/extension.cjs",
       browser: "./dist/browser.js",
       extensionKind: ["workspace", "ui"],
-      engines: { vscode: "^1.100.0" },
+      engines: { vscode: "^1.102.0" },
       capabilities: {
         virtualWorkspaces: { supported: true },
         untrustedWorkspaces: { supported: "limited" },
@@ -103,5 +103,31 @@ describe("extension manifest", () => {
         "logrotate.openDirectiveDocumentation",
       ].sort(),
     );
+  });
+
+  it("keeps language editing rules conservative and theme-neutral", async () => {
+    const configuration = JSON.parse(
+      await readFile(resolve(root, "language-configuration.json"), "utf8"),
+    ) as unknown;
+
+    expect(configuration).toEqual({
+      comments: { lineComment: { comment: "#", noIndent: false } },
+      brackets: [["{", "}"]],
+      autoClosingPairs: [
+        { open: "{", close: "}" },
+        { open: '"', close: '"', notIn: ["string", "comment"] },
+        { open: "'", close: "'", notIn: ["string", "comment"] },
+      ],
+      surroundingPairs: [
+        ["{", "}"],
+        ['"', '"'],
+        ["'", "'"],
+      ],
+      indentationRules: {
+        increaseIndentPattern: "^.*\\{\\s*(?:#.*)?$",
+        decreaseIndentPattern: "^\\s*\\}",
+      },
+    });
+    expect(JSON.stringify(configuration)).not.toMatch(/foreground|background|color/iu);
   });
 });

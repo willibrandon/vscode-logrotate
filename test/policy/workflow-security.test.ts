@@ -66,9 +66,11 @@ describe("workflow supply-chain policy", () => {
   it("tests the declared editor matrix, browser host, pinned oracle, and Insiders warning", () => {
     const ci = workflow("ci.yml");
     expect(ci).toContain("os: [ubuntu-latest, macos-latest, windows-latest]");
-    expect(ci).toContain("vscode: [1.100.0, stable]");
+    expect(ci).toContain("vscode: [1.102.0, stable]");
     expect(ci).toContain("npm run test:web");
     expect(ci).toContain("npm run test:vsix");
+    expect(ci).toContain("dist/test/desktop/extension.test.cjs");
+    expect(ci).toContain("dist/test/web/index.cjs");
     expect(ci).toContain("ref: 3be1e9ccffe0c2245ed596183c74913d553f9f18");
     expect(ci).toMatch(/insiders:[\s\S]*continue-on-error: true/u);
   });

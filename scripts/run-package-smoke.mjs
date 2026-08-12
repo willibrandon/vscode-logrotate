@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { runVSCodeCommand } from "@vscode/test-electron";
+import { runTests as runWebTests } from "@vscode/test-web";
 import yauzl from "yauzl";
 
 const root = resolve(import.meta.dirname, "..");
@@ -12,7 +13,10 @@ const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"
 const version = process.env.VSCODE_VERSION ?? "stable";
 const vsix = resolve(root, process.env.VSIX_PATH ?? `dist/logrotate-${manifest.version}.vsix`);
 const checksum = resolve(root, `dist/logrotate-${manifest.version}.sha256`);
+const desktopTests = resolve(root, "dist/test/desktop/extension.test.cjs");
+const webTests = resolve(root, "dist/test/web/index.cjs");
 const commandEnvironment = { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" };
+await Promise.all([requireFile(desktopTests), requireFile(webTests)]);
 const digest = createHash("sha256")
   .update(await readFile(vsix))
   .digest("hex");
@@ -32,7 +36,13 @@ if (packagedAsPreRelease !== expectedPreRelease) {
 const temporaryRoot = await mkdtemp(join(tmpdir(), "vscode-logrotate-vsix-"));
 const extensionsDirectory = resolve(temporaryRoot, "extensions");
 const userDataDirectory = resolve(temporaryRoot, "user-data");
-await Promise.all([mkdir(extensionsDirectory), mkdir(userDataDirectory)]);
+const browserExtensionDirectory = resolve(temporaryRoot, "browser-extension");
+const packagedWebTests = resolve(browserExtensionDirectory, "test-harness/index.cjs");
+await Promise.all([
+  mkdir(extensionsDirectory),
+  mkdir(userDataDirectory),
+  mkdir(browserExtensionDirectory),
+]);
 
 try {
   const profileArguments = [
@@ -73,11 +83,78 @@ try {
     VSCODE_VERSION: version,
   });
   if (exitCode !== 0) throw new Error(`VSIX smoke test exited with code ${exitCode}.`);
+
+  await extractPackagedExtension(vsix, browserExtensionDirectory);
+  await mkdir(dirname(packagedWebTests), { recursive: true });
+  await writeFile(packagedWebTests, await readFile(webTests));
+  await runWebTests({
+    browserType: "chromium",
+    extensionDevelopmentPath: browserExtensionDirectory,
+    extensionTestsPath: packagedWebTests,
+    folderPath: resolve(root, "test/fixtures/workspace"),
+    headless: true,
+    quality: version === "insiders" ? "insiders" : "stable",
+    testRunnerDataDir: resolve(root, ".vscode-test-web"),
+  });
   console.log(
-    `Installed and activated ${expectedIdentity} from the local VSIX in a clean profile.`,
+    `Installed and activated ${expectedIdentity} from the local VSIX in clean desktop and browser hosts.`,
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
+}
+
+async function requireFile(path) {
+  try {
+    if (!(await stat(path)).isFile()) throw new Error(`${path} is not a file.`);
+  } catch (error) {
+    throw new Error(`Package smoke test bundle is missing: ${path}`, { cause: error });
+  }
+}
+
+function extractPackagedExtension(path, destination) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    yauzl.open(path, { lazyEntries: true }, (openError, archive) => {
+      if (openError !== null || archive === undefined) {
+        rejectPromise(openError ?? new Error(`Unable to open ${path}.`));
+        return;
+      }
+      archive.once("error", rejectPromise);
+      archive.once("end", resolvePromise);
+      archive.on("entry", (entry) => {
+        if (!entry.fileName.startsWith("extension/") || entry.fileName.endsWith("/")) {
+          archive.readEntry();
+          return;
+        }
+        const relativePath = entry.fileName.slice("extension/".length);
+        const outputPath = resolve(destination, relativePath);
+        if (
+          relativePath === "" ||
+          relativePath.includes("\\") ||
+          relativePath.includes("\0") ||
+          (!outputPath.startsWith(`${destination}${sep}`) && outputPath !== destination)
+        ) {
+          rejectPromise(new Error(`Unsafe VSIX entry: ${entry.fileName}`));
+          archive.close();
+          return;
+        }
+        archive.openReadStream(entry, (streamError, stream) => {
+          if (streamError !== null || stream === undefined) {
+            rejectPromise(streamError ?? new Error(`Unable to read ${entry.fileName}.`));
+            return;
+          }
+          const chunks = [];
+          stream.on("data", (chunk) => chunks.push(chunk));
+          stream.once("error", rejectPromise);
+          stream.once("end", () => {
+            void mkdir(dirname(outputPath), { recursive: true })
+              .then(async () => writeFile(outputPath, Buffer.concat(chunks)))
+              .then(() => archive.readEntry(), rejectPromise);
+          });
+        });
+      });
+      archive.readEntry();
+    });
+  });
 }
 
 function run(command, arguments_, environment) {

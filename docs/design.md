@@ -394,11 +394,12 @@ This leads to the following 2026 baseline:
   ([VSCE repository](https://github.com/microsoft/vscode-vsce),
   [publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)).
 
-The target engine should be `^1.100.0` unless implementation proves a later API
-is required. It is new enough for the intended runtime and web patterns without
-arbitrarily requiring the newest editor. CI must exercise that floor, current
-stable, and Insiders. The development runtime should be Node 24 LTS on the
-review date, not the short-lived current release
+The implementation target is `^1.102.0`. VS Code 1.102 introduced the schema-supported
+`comments.lineComment` object needed to express indentation behavior without a language
+configuration warning ([microsoft/vscode#243283](https://github.com/microsoft/vscode/pull/243283)).
+That is the first genuinely necessary later API beyond the original 1.100 baseline. CI must
+exercise that floor, current stable, and Insiders. The development runtime should be Node 24 LTS
+on the review date, not the short-lived current release
 ([Node release schedule](https://nodejs.org/en/about/previous-releases)).
 
 ## 8. Product identity and manifest design
@@ -432,7 +433,7 @@ at small size and has no transparent or dark outer corners.
 The exact JSON is an implementation artifact, but it should express these
 decisions:
 
-- `engines.vscode`: `^1.100.0` initially.
+- `engines.vscode`: `^1.102.0`, the first schema-clean line-comment object implementation.
 - `main`: bundled desktop extension entry.
 - `browser`: bundled browser extension entry.
 - `extensionKind`: prefer the workspace extension host so include paths and the

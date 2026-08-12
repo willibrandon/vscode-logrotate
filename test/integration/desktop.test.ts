@@ -87,6 +87,41 @@ suite("Logrotate desktop extension", () => {
     assert.ok(completion.items.some(({ label }) => label === "compress"));
     assert.ok(edits !== undefined && edits.length > 0, "expected formatting edits");
   });
+
+  test("toggles configuration comments at indentation boundaries and leaves embedded shell to its language", async () => {
+    const source = [
+      "/var/log/application.log {",
+      "  daily",
+      "  ",
+      "  postrotate",
+      "    echo rotated",
+      "  endscript",
+      "}",
+      "",
+    ].join("\n");
+    const document = await vscode.workspace.openTextDocument({
+      language: "logrotate",
+      content: source,
+    });
+    const editor = await vscode.window.showTextDocument(document);
+    editor.selections = [0, 1, 2, 4].map((line) => {
+      const position = new vscode.Position(
+        line,
+        document.lineAt(line).firstNonWhitespaceCharacterIndex,
+      );
+      return new vscode.Selection(position, position);
+    });
+
+    await vscode.commands.executeCommand("editor.action.commentLine");
+
+    assert.equal(document.lineAt(0).text, "# /var/log/application.log {");
+    assert.equal(document.lineAt(1).text, "  # daily");
+    assert.equal(document.lineAt(2).text, "  # ");
+    assert.equal(document.lineAt(4).text, "    echo rotated");
+
+    await vscode.commands.executeCommand("editor.action.commentLine");
+    assert.equal(document.getText(), source);
+  });
 });
 
 async function waitForDiagnostics(uri: vscode.Uri): Promise<readonly vscode.Diagnostic[]> {

@@ -35,7 +35,7 @@
   ],
   "engines": {
     "node": ">=24 <25",
-    "vscode": "^1.100.0"
+    "vscode": "^1.102.0"
   },
   "main": "./dist/extension.cjs",
   "browser": "./dist/browser.js",
@@ -256,6 +256,7 @@
     "test:vsix": "node ./scripts/run-package-smoke.mjs",
     "test:integration": "npm run build && node ./scripts/run-desktop-tests.mjs",
     "test:web": "npm run build && node ./scripts/run-web-tests.mjs",
+    "capture:themes": "npm run build && node ./scripts/capture-theme-screenshots.mjs",
     "build": "node ./esbuild.mjs",
     "check:bundles": "node ./scripts/check-bundles.mjs",
     "check:licenses": "node ./scripts/check-licenses.mjs",
@@ -273,7 +274,7 @@
     "@eslint/js": "10.0.1",
     "@types/mocha": "10.0.10",
     "@types/node": "24.13.3",
-    "@types/vscode": "1.100.0",
+    "@types/vscode": "1.102.0",
     "@typescript/native": "npm:typescript@7.0.2",
     "@vitest/coverage-v8": "4.1.10",
     "@vscode/test-cli": "0.0.15",
@@ -284,6 +285,7 @@
     "eslint": "10.8.1",
     "fast-check": "4.9.0",
     "glob": "13.0.6",
+    "playwright": "1.62.1",
     "prettier": "3.9.6",
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "8.67.0",

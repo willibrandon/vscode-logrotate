@@ -1,0 +1,14 @@
+# Rotate application and proxy logs without touching active shell code.
+"/var/log/application output.log" /var/log/caddy/access-*.log {
+    daily
+    rotate 14
+    size 100M
+    create 0640 caddy adm
+    compress
+    delaycompress
+    dateext
+
+    postrotate
+        systemctl reload caddy >/dev/null 2>&1 || true
+    endscript
+}

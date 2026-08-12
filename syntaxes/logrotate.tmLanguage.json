@@ -1,0 +1,185 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Logrotate",
+  "scopeName": "source.logrotate",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#scripts"
+    },
+    {
+      "include": "#include"
+    },
+    {
+      "include": "#create"
+    },
+    {
+      "include": "#user-group"
+    },
+    {
+      "include": "#size"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#path-header"
+    },
+    {
+      "include": "#directive"
+    },
+    {
+      "include": "#braces"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "match": "^(\\s*)(#.*)$",
+          "captures": {
+            "2": {
+              "name": "comment.line.number-sign.logrotate"
+            }
+          }
+        }
+      ]
+    },
+    "scripts": {
+      "name": "meta.embedded.block.shell",
+      "begin": "^(\\s*)((?:firstaction|lastaction|postrotate|preremove|prerotate))(?:\\s*)$",
+      "beginCaptures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        }
+      },
+      "end": "^(\\s*)(endscript)(?:\\s*)$",
+      "endCaptures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        }
+      },
+      "contentName": "source.shell",
+      "patterns": [
+        {
+          "include": "source.shell"
+        }
+      ]
+    },
+    "include": {
+      "match": "^(\\s*)(include)(?:\\s*=\\s*|\\s+)(.+?)\\s*$",
+      "captures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        },
+        "3": {
+          "name": "string.unquoted.path.include.logrotate"
+        }
+      }
+    },
+    "create": {
+      "match": "^(\\s*)(create|createolddir)(?:\\s*=\\s*|\\s+)([0-7]{3,4})(?:\\s+([^\\s]+))?(?:\\s+([^\\s]+))?\\s*$",
+      "captures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        },
+        "3": {
+          "name": "constant.numeric.mode.logrotate"
+        },
+        "4": {
+          "name": "entity.name.user.logrotate"
+        },
+        "5": {
+          "name": "entity.name.group.logrotate"
+        }
+      }
+    },
+    "user-group": {
+      "match": "^(\\s*)(su)(?:\\s*=\\s*|\\s+)([^\\s]+)\\s+([^\\s]+)\\s*$",
+      "captures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        },
+        "3": {
+          "name": "entity.name.user.logrotate"
+        },
+        "4": {
+          "name": "entity.name.group.logrotate"
+        }
+      }
+    },
+    "size": {
+      "match": "^(\\s*)(size|minsize|maxsize)(?:\\s*=\\s*|\\s+)([0-9]+)([kKMG])?\\s*$",
+      "captures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        },
+        "3": {
+          "name": "constant.numeric.logrotate"
+        },
+        "4": {
+          "name": "keyword.other.unit.logrotate"
+        }
+      }
+    },
+    "number": {
+      "match": "^(\\s*)(rotate|start|minage|maxage|minutes|weekly|monthly|shredcycles)(?:\\s*=\\s*|\\s+)(-?[0-9]+)\\s*$",
+      "captures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        },
+        "3": {
+          "name": "constant.numeric.logrotate"
+        }
+      }
+    },
+    "path-header": {
+      "patterns": [
+        {
+          "match": "^(\\s*)((?:/|~/)[^{}]*?)(\\{)?\\s*$",
+          "captures": {
+            "2": {
+              "name": "string.unquoted.path.logrotate"
+            },
+            "3": {
+              "name": "punctuation.section.block.begin.logrotate"
+            }
+          }
+        },
+        {
+          "match": "^(\\s*)((?:\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')(?:\\s+(?:\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'))*)(\\{)?\\s*$",
+          "captures": {
+            "2": {
+              "name": "string.quoted.path.logrotate"
+            },
+            "3": {
+              "name": "punctuation.section.block.begin.logrotate"
+            }
+          }
+        }
+      ]
+    },
+    "directive": {
+      "match": "^(\\s*)((?:ignoreduplicates|compressoptions|noallowhardlink|nodateyesterday|nodelaycompress|nosharedscripts|nocopytruncate|nocreateolddir|allowhardlink|dateyesterday|delaycompress|nodatehourago|sharedscripts|uncompresscmd|addextension|copytruncate|createolddir|norenamecopy|compresscmd|compressext|datehourago|firstaction|nomissingok|shredcycles|dateformat|lastaction|nocompress|notifempty|postrotate|renamecopy|extension|mailfirst|missingok|nodateext|preremove|prerotate|compress|maillast|nocreate|noolddir|tabooext|taboopat|dateext|ifempty|include|maxsize|minsize|minutes|monthly|noshred|create|errors|hourly|maxage|minage|nocopy|nomail|olddir|rotate|weekly|yearly|daily|shred|start|copy|mail|size|su))(?=\\s|=|$)",
+      "captures": {
+        "2": {
+          "name": "keyword.control.directive.logrotate"
+        }
+      }
+    },
+    "braces": {
+      "patterns": [
+        {
+          "match": "\\{",
+          "name": "punctuation.section.block.begin.logrotate"
+        },
+        {
+          "match": "\\}",
+          "name": "punctuation.section.block.end.logrotate"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,319 @@
+{
+  "name": "logrotate",
+  "displayName": "Logrotate",
+  "description": "Language support for logrotate configuration and state files",
+  "version": "0.1.0",
+  "private": true,
+  "license": "GPL-2.0-only",
+  "publisher": "logrotate",
+  "author": {
+    "name": "The logrotate contributors"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/logrotate/vscode-logrotate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/logrotate/vscode-logrotate/issues"
+  },
+  "homepage": "https://github.com/logrotate/vscode-logrotate#readme",
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "logrotate",
+    "configuration",
+    "linux",
+    "language-server"
+  ],
+  "type": "module",
+  "packageManager": "npm@11.17.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24 <25",
+    "vscode": "^1.100.0"
+  },
+  "main": "./dist/extension.cjs",
+  "browser": "./dist/browser.js",
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": true,
+      "description": "%capabilities.virtualWorkspaces%"
+    },
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%capabilities.untrustedWorkspaces%",
+      "restrictedConfigurations": [
+        "logrotate.externalValidation.mode",
+        "logrotate.executablePath"
+      ]
+    }
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "logrotate",
+        "aliases": [
+          "Logrotate",
+          "logrotate"
+        ],
+        "filenames": [
+          "logrotate.conf"
+        ],
+        "filenamePatterns": [
+          "**/logrotate.d/*",
+          "**/*.logrotate",
+          "**/*.logrotate.conf"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "logrotate-state",
+        "aliases": [
+          "Logrotate State",
+          "logrotate-state"
+        ],
+        "filenames": [
+          "logrotate.status"
+        ],
+        "filenamePatterns": [
+          "**/logrotate/status"
+        ],
+        "firstLine": "^logrotate state -- version [12]$"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "logrotate",
+        "scopeName": "source.logrotate",
+        "path": "./syntaxes/logrotate.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.shell": "shellscript"
+        }
+      },
+      {
+        "language": "logrotate-state",
+        "scopeName": "source.logrotate.state",
+        "path": "./syntaxes/logrotate-state.tmLanguage.json"
+      },
+      {
+        "scopeName": "source.logrotate.markdown",
+        "path": "./syntaxes/logrotate-markdown.tmLanguage.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.logrotate": "logrotate"
+        }
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "logrotate",
+        "scopes": {
+          "keyword": [
+            "keyword.control.directive.logrotate"
+          ],
+          "string": [
+            "string.unquoted.path.logrotate"
+          ],
+          "number": [
+            "constant.numeric.logrotate"
+          ],
+          "comment": [
+            "comment.line.number-sign.logrotate"
+          ],
+          "parameter": [
+            "entity.name.user.logrotate"
+          ]
+        }
+      }
+    ],
+    "snippets": [
+      {
+        "language": "logrotate",
+        "path": "./snippets/logrotate.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "logrotate.validateWithInstalledLogrotate",
+        "title": "%command.validateExternal%",
+        "category": "Logrotate",
+        "enablement": "logrotate.externalValidationAvailable"
+      },
+      {
+        "command": "logrotate.restartLanguageServer",
+        "title": "%command.restartServer%",
+        "category": "Logrotate"
+      },
+      {
+        "command": "logrotate.showLanguageServerOutput",
+        "title": "%command.showOutput%",
+        "category": "Logrotate"
+      },
+      {
+        "command": "logrotate.openDirectiveDocumentation",
+        "title": "%command.openDocumentation%",
+        "category": "Logrotate"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "logrotate.validateWithInstalledLogrotate",
+          "when": "editorLangId == logrotate && logrotate.externalValidationAvailable"
+        },
+        {
+          "command": "logrotate.openDirectiveDocumentation",
+          "when": "editorLangId == logrotate"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Logrotate",
+      "properties": {
+        "logrotate.validation.enable": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "%configuration.validation.enable%"
+        },
+        "logrotate.validation.maxProblems": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 1,
+          "maximum": 1000,
+          "scope": "resource",
+          "description": "%configuration.validation.maxProblems%"
+        },
+        "logrotate.targetVersion": {
+          "type": "string",
+          "default": "latest",
+          "enum": [
+            "latest",
+            "auto",
+            "3.22"
+          ],
+          "scope": "resource",
+          "description": "%configuration.targetVersion%"
+        },
+        "logrotate.externalValidation.mode": {
+          "type": "string",
+          "default": "off",
+          "enum": [
+            "off",
+            "onSave"
+          ],
+          "scope": "resource",
+          "description": "%configuration.externalValidation.mode%"
+        },
+        "logrotate.executablePath": {
+          "type": "string",
+          "default": "logrotate",
+          "scope": "machine-overridable",
+          "description": "%configuration.executablePath%"
+        },
+        "logrotate.trace.server": {
+          "type": "string",
+          "default": "off",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "scope": "window",
+          "description": "%configuration.trace.server%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "clean": "node ./scripts/clean.mjs",
+    "generate": "node ./scripts/generate-language-data.mjs",
+    "check:generated": "node ./scripts/generate-language-data.mjs --check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --build",
+    "test": "vitest run",
+    "test:core": "vitest run packages/language-core/test",
+    "test:lsp": "vitest run packages/language-server/test",
+    "test:client": "vitest run packages/vscode-client/test",
+    "test:grammar": "vitest run test/grammar",
+    "test:package": "vitest run test/package",
+    "test:integration": "vscode-test",
+    "test:web": "vscode-test-web --config .vscode-test-web.mjs",
+    "build": "node ./esbuild.mjs",
+    "check:bundles": "node ./scripts/check-bundles.mjs",
+    "audit": "npm audit --audit-level=moderate",
+    "vscode:prepublish": "npm run build",
+    "package": "npm run build && vsce package --no-dependencies --out dist/logrotate.vsix",
+    "package:list": "vsce ls --no-dependencies",
+    "verify": "npm run check:generated && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run check:bundles && npm run test:package && npm run audit"
+  },
+  "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "6.0.1",
+    "@eslint/js": "10.0.1",
+    "@types/mocha": "10.0.10",
+    "@types/node": "24.13.3",
+    "@types/vscode": "1.100.0",
+    "@vscode/test-cli": "0.0.15",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/test-web": "0.0.81",
+    "@vscode/vsce": "3.9.2",
+    "esbuild": "0.28.2",
+    "eslint": "10.8.1",
+    "fast-check": "4.9.0",
+    "glob": "13.0.6",
+    "prettier": "3.9.6",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "typescript-eslint": "8.67.0",
+    "vitest": "4.1.10",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2",
+    "yaml": "2.9.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.0",
+    "vscode-languageserver": "10.1.0",
+    "vscode-languageserver-textdocument": "1.0.12",
+    "vscode-uri": "3.1.0"
+  },
+  "overrides": {
+    "diff": "8.0.3",
+    "serialize-javascript": "7.1.0"
+  },
+  "files": [
+    "dist/extension.cjs",
+    "dist/browser.js",
+    "dist/nodeServer.cjs",
+    "dist/browserServer.js",
+    "syntaxes/",
+    "snippets/",
+    "language-configuration.json",
+    "package.nls.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "allowScripts": {
+    "@playwright/browser-chromium@1.62.1": true,
+    "@vscode/vsce-sign@2.0.9": true,
+    "esbuild@0.28.2": true,
+    "keytar@7.9.0": true,
+    "libxmljs2@0.37.0": true
+  }
+}

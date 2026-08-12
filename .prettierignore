@@ -1,0 +1,8 @@
+dist
+node_modules
+package-lock.json
+syntaxes/*.json
+snippets/*.json
+packages/language-core/src/generated
+docs/directives.md
+docs/design.md

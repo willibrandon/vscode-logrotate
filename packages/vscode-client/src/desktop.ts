@@ -1,0 +1,110 @@
+import * as vscode from "vscode";
+import { LanguageClient, TransportKind } from "vscode-languageclient/node";
+import type { ServerOptions } from "vscode-languageclient/node";
+import { clientOptions, registerCommonCommands, registerFileSystemBridge } from "./common.js";
+import {
+  explainUnavailability,
+  externalValidationUnavailable,
+} from "./external-validation-policy.js";
+import { NodeProcessHost, validateWithInstalledLogrotate } from "./external-validator.js";
+
+let client: LanguageClient | undefined;
+
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const output = vscode.window.createOutputChannel("Logrotate Language Server", { log: true });
+  const module = vscode.Uri.joinPath(context.extensionUri, "dist", "nodeServer.cjs").fsPath;
+  const serverOptions: ServerOptions = { module, transport: TransportKind.ipc };
+  client = new LanguageClient(
+    "logrotate",
+    "Logrotate Language Server",
+    serverOptions,
+    clientOptions(output),
+  );
+  context.subscriptions.push(output, client);
+  registerCommonCommands(context, { client, output });
+  registerFileSystemBridge({ client, output });
+  const diagnostics = vscode.languages.createDiagnosticCollection("logrotate-installed");
+  context.subscriptions.push(diagnostics);
+  const validate = async (document: vscode.TextDocument, explicit: boolean): Promise<void> => {
+    const unavailable = externalValidationUnavailable({
+      isDesktop: true,
+      isTrusted: vscode.workspace.isTrusted,
+      scheme: document.uri.scheme,
+      isSaved: !document.isUntitled && !document.isDirty,
+      languageId: document.languageId,
+    });
+    if (unavailable !== undefined) {
+      if (explicit) await vscode.window.showInformationMessage(explainUnavailability(unavailable));
+      return;
+    }
+    const executable = vscode.workspace
+      .getConfiguration("logrotate", document.uri)
+      .get<string>("executablePath", "logrotate");
+    try {
+      const result = await validateWithInstalledLogrotate(
+        executable,
+        document.uri.fsPath,
+        new NodeProcessHost(),
+      );
+      diagnostics.set(document.uri, diagnosticsFromOutput(document, result));
+    } catch (error) {
+      diagnostics.delete(document.uri);
+      if (explicit) {
+        await vscode.window.showErrorMessage(
+          `Unable to run installed logrotate: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  };
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "logrotate.validateWithInstalledLogrotate",
+      async (): Promise<void> => {
+        const document = vscode.window.activeTextEditor?.document;
+        if (document === undefined) {
+          await vscode.window.showInformationMessage(
+            "Open a logrotate configuration file before running installed validation.",
+          );
+          return;
+        }
+        await validate(document, true);
+      },
+    ),
+    vscode.workspace.onDidSaveTextDocument(async (document): Promise<void> => {
+      const mode = vscode.workspace
+        .getConfiguration("logrotate", document.uri)
+        .get<string>("externalValidation.mode", "off");
+      if (mode === "onSave") await validate(document, false);
+    }),
+  );
+  await client.start();
+}
+
+export async function deactivate(): Promise<void> {
+  await client?.stop();
+  client = undefined;
+}
+
+function diagnosticsFromOutput(
+  document: vscode.TextDocument,
+  result: Awaited<ReturnType<typeof validateWithInstalledLogrotate>>,
+): vscode.Diagnostic[] {
+  if (result.exitCode === 0 && !result.timedOut && !result.truncated) return [];
+  const output = `${result.stderr}\n${result.stdout}`.trim();
+  const firstLine = output
+    .split(/\r\n|\n|\r/u)
+    .find((line) => /error|warning/u.test(line.toLowerCase()));
+  const message = result.timedOut
+    ? "Installed logrotate validation timed out."
+    : result.truncated
+      ? "Installed logrotate validation exceeded its output limit."
+      : (firstLine ?? `Installed logrotate exited with code ${result.exitCode ?? "unknown"}.`);
+  const diagnostic = new vscode.Diagnostic(
+    new vscode.Range(0, 0, 0, Math.max(1, document.lineAt(0).text.length)),
+    `[logrotate ${result.version} on this host] ${message}`,
+    vscode.DiagnosticSeverity.Warning,
+  );
+  diagnostic.source = "logrotate-installed";
+  diagnostic.code = "LRHOST";
+  return [diagnostic];
+}

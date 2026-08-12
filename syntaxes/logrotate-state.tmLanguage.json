@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Logrotate State",
+  "scopeName": "source.logrotate.state",
+  "patterns": [
+    {
+      "match": "^(logrotate state -- version) ([12])$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.header.logrotate.state"
+        },
+        "2": {
+          "name": "constant.numeric.version.logrotate.state"
+        }
+      }
+    },
+    {
+      "match": "^(\"(?:[^\"\\\\]|\\\\.)*\")\\s+([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})(?:-([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2}))?$",
+      "captures": {
+        "1": {
+          "name": "string.quoted.path.logrotate.state"
+        },
+        "2": {
+          "name": "constant.numeric.year.logrotate.state"
+        },
+        "3": {
+          "name": "constant.numeric.month.logrotate.state"
+        },
+        "4": {
+          "name": "constant.numeric.day.logrotate.state"
+        },
+        "5": {
+          "name": "constant.numeric.hour.logrotate.state"
+        },
+        "6": {
+          "name": "constant.numeric.minute.logrotate.state"
+        },
+        "7": {
+          "name": "constant.numeric.second.logrotate.state"
+        }
+      }
+    },
+    {
+      "match": "^#.*$",
+      "name": "comment.line.number-sign.logrotate.state"
+    },
+    {
+      "match": "^.+$",
+      "name": "invalid.illegal.record.logrotate.state"
+    }
+  ]
+}

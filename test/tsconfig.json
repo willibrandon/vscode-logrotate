@@ -1,0 +1,21 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "../node_modules/.cache/tests.tsbuildinfo",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["**/*.ts"],
+  "references": [
+    {
+      "path": "../packages/language-core"
+    },
+    {
+      "path": "../packages/language-server"
+    },
+    {
+      "path": "../packages/vscode-client"
+    }
+  ]
+}

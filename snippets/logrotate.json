@@ -1,0 +1,53 @@
+{
+  "Minimal rotation stanza": {
+    "prefix": "stanza",
+    "body": [
+      "${1:/var/log/application.log} {",
+      "\\t${2:weekly}",
+      "\\trotate ${3:4}",
+      "}"
+    ],
+    "description": "Create a minimal logrotate stanza."
+  },
+  "Size-based rotation": {
+    "prefix": "stanza-size",
+    "body": [
+      "${1:/var/log/application.log} {",
+      "\\tsize ${2:100M}",
+      "\\trotate ${3:4}",
+      "}"
+    ],
+    "description": "Rotate a log when it reaches a selected size."
+  },
+  "Time-based rotation": {
+    "prefix": "stanza-time",
+    "body": [
+      "${1:/var/log/application.log} {",
+      "\\t${2|hourly,daily,weekly,monthly,yearly|}",
+      "\\trotate ${3:4}",
+      "}"
+    ],
+    "description": "Rotate a log on a selected time interval."
+  },
+  "Compressed rotation": {
+    "prefix": "stanza-compress",
+    "body": [
+      "${1:/var/log/application.log} {",
+      "\\t${2:weekly}",
+      "\\trotate ${3:4}",
+      "\\tcompress",
+      "\\tdelaycompress",
+      "}"
+    ],
+    "description": "Create a conservative compressed rotation stanza."
+  },
+  "Script block": {
+    "prefix": "script",
+    "body": [
+      "${1|firstaction,lastaction,prerotate,postrotate,preremove|}",
+      "\\t${2:# commands}",
+      "endscript"
+    ],
+    "description": "Create an opaque logrotate shell script block."
+  }
+}

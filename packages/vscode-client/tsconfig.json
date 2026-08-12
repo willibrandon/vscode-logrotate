@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib",
+    "lib": ["ES2025", "WebWorker"],
+    "tsBuildInfoFile": "../../node_modules/.cache/vscode-client.tsbuildinfo",
+    "types": ["vscode"]
+  },
+  "include": ["src/common.ts", "src/external-validation-policy.ts"],
+  "references": [
+    {
+      "path": "../language-server"
+    }
+  ]
+}

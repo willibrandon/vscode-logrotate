@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.vscode-test/
+.vscode-test-web/
+.eslintcache
+*.tsbuildinfo
+packages/*/lib/
+test-results/
+playwright-report/
+*.vsix
+*.log
+.DS_Store
+
+.testagent/

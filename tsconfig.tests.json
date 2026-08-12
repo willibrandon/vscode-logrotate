@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "rootDir": ".",
+    "tsBuildInfoFile": "./node_modules/.cache/all-tests.tsbuildinfo",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "packages/*/test/**/*.ts",
+    "scripts/test/**/*.ts",
+    "test/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "references": [
+    {
+      "path": "./packages/language-core"
+    },
+    {
+      "path": "./packages/language-server"
+    },
+    {
+      "path": "./packages/vscode-client"
+    }
+  ]
+}

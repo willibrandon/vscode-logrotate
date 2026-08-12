@@ -1,0 +1,25 @@
+schemaVersion: 1
+latest: "3.22"
+supported:
+  - version: "3.22"
+    upstreamRevision: 3be1e9ccffe0c2245ed596183c74913d553f9f18
+    dateFormatConversions:
+      - "%Y"
+      - "%m"
+      - "%d"
+      - "%H"
+      - "%M"
+      - "%S"
+      - "%G"
+      - "%V"
+      - "%U"
+      - "%W"
+      - "%u"
+      - "%w"
+      - "%y"
+      - "%g"
+      - "%j"
+      - "%s"
+      - "%z"
+    includeDepth: 16
+    notes: "Earliest fully modeled release; older syntax is handled conservatively."

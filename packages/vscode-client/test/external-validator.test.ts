@@ -3,9 +3,13 @@ import {
   detectInstalledLogrotateVersion,
   externalValidationSummary,
   NodeProcessHost,
+  processPlatformPolicy,
+  terminateProcessTree,
   validateWithInstalledLogrotate,
   type ProcessHost,
   type ProcessResult,
+  type ProcessTreeChild,
+  type ProcessTreeHost,
 } from "../src/external-validator.js";
 
 const success: ProcessResult = {
@@ -257,3 +261,106 @@ describe("Node process host", () => {
     ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
+
+describe("process platform and tree policy", () => {
+  it("selects native Windows and Unix process behavior without depending on the test host", () => {
+    expect(processPlatformPolicy("win32")).toEqual({
+      detached: false,
+      nullStatePath: "NUL",
+    });
+    expect(processPlatformPolicy("linux")).toEqual({
+      detached: true,
+      nullStatePath: "/dev/null",
+    });
+  });
+
+  it("terminates a detached process group gracefully and then forcefully", () => {
+    const child = processTreeChild(42);
+    const { host, killProcessGroup, scheduled, unref } = processTreeHost();
+
+    terminateProcessTree(child, true, host);
+
+    expect(killProcessGroup).toHaveBeenNthCalledWith(1, -42, "SIGTERM");
+    expect(child.kill).not.toHaveBeenCalled();
+    expect(unref).toHaveBeenCalledOnce();
+    expect(scheduled).toHaveLength(1);
+    scheduled[0]?.();
+    expect(killProcessGroup).toHaveBeenNthCalledWith(2, -42, "SIGKILL");
+  });
+
+  it("falls back to the child handle and does not signal an exited process", () => {
+    const child = processTreeChild(42);
+    const controls = processTreeHost();
+    controls.killProcessGroup.mockImplementation((): never => {
+      throw new Error("group exited");
+    });
+
+    terminateProcessTree(child, true, controls.host);
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+
+    child.signalCode = "SIGTERM";
+    controls.scheduled[0]?.();
+    expect(child.kill).toHaveBeenCalledOnce();
+    expect(controls.killProcessGroup).toHaveBeenCalledOnce();
+
+    const exited = processTreeChild();
+    exited.exitCode = 0;
+    terminateProcessTree(exited, false, controls.host);
+    expect(exited.kill).not.toHaveBeenCalled();
+
+    const signalled = processTreeChild();
+    signalled.signalCode = "SIGTERM";
+    terminateProcessTree(signalled, false, controls.host);
+    expect(signalled.kill).not.toHaveBeenCalled();
+  });
+
+  it("uses the child handle when process-group signaling is unavailable", () => {
+    const child = processTreeChild();
+    const controls = processTreeHost();
+
+    terminateProcessTree(child, false, controls.host);
+    expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    controls.scheduled[0]?.();
+    expect(child.kill).toHaveBeenNthCalledWith(2, "SIGKILL");
+    expect(controls.killProcessGroup).not.toHaveBeenCalled();
+  });
+});
+
+function processTreeChild(pid?: number): ProcessTreeChild & {
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+  kill: ReturnType<typeof vi.fn<(signal: NodeJS.Signals) => boolean>>;
+} {
+  return {
+    exitCode: null,
+    pid,
+    signalCode: null,
+    kill: vi.fn(() => true),
+  };
+}
+
+function processTreeHost(): {
+  readonly host: ProcessTreeHost;
+  readonly killProcessGroup: ReturnType<
+    typeof vi.fn<(pid: number, signal: NodeJS.Signals) => void>
+  >;
+  readonly scheduled: (() => void)[];
+  readonly unref: ReturnType<typeof vi.fn<() => void>>;
+} {
+  const killProcessGroup = vi.fn<(pid: number, signal: NodeJS.Signals) => void>();
+  const scheduled: (() => void)[] = [];
+  const unref = vi.fn<() => void>();
+  return {
+    host: {
+      killProcessGroup,
+      setTimeout(callback, milliseconds): { unref(): void } {
+        expect(milliseconds).toBe(500);
+        scheduled.push(callback);
+        return { unref };
+      },
+    },
+    killProcessGroup,
+    scheduled,
+    unref,
+  };
+}

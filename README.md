@@ -3,7 +3,7 @@
 Language support for [logrotate](https://github.com/logrotate/logrotate) configuration and state
 files in Visual Studio Code desktop, remote, and web extension hosts.
 
-**Version 0.1.6 is an early public pre-release.** The language model is currently pinned to
+**Version 0.1.7 is an early public pre-release.** The language model is currently pinned to
 logrotate `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later reviewed syntax).
 
 ## Features
@@ -38,6 +38,7 @@ The extension intentionally uses narrow defaults:
 - files directly under a `logrotate.d` directory
 - `*.logrotate` and `*.logrotate.conf`
 - extensionless files whose first line is a complete absolute or tilde-prefixed log-path stanza
+- files resolved through an `include` directive from an open root configuration
 - `logrotate.status`
 - `logrotate/status`
 - state files whose first line is `logrotate state -- version 1` or `logrotate state -- version 2`
@@ -121,8 +122,9 @@ after an explicit user action.
 
 ## Troubleshooting
 
-- If an unusual filename is plain text, confirm the language mode in the status bar and add the
-  narrow `files.associations` entry shown above. The extension never forces language reassignment.
+- If an unusual standalone filename is plain text, confirm the language mode in the status bar and
+  add the narrow `files.associations` entry shown above. Files actually resolved through an
+  `include` directive are assigned the Logrotate language when resolved from an open root.
 - Run **Logrotate: Show Language Server Output** to inspect sanitized startup, analysis, and failure
   logs. Enable `logrotate.trace.server` only temporarily because protocol traces can include text.
 - Run **Logrotate: Restart Language Server** after changing extension-host or remote filesystem
@@ -137,15 +139,26 @@ Requirements:
 
 - Node.js 24 LTS
 - npm 11 (the exact package manager version is recorded in `package.json`)
-- Chromium and Xvfb for web and headless desktop integration tests
+- Git for Windows, including Git Bash, when developing on native Windows
+- Chromium and Xvfb for web and headless desktop integration tests on Linux
 - logrotate 3.22 or later for optional differential and installed-tool tests
 - Docker and OpenSSH for the isolated Remote SSH smoke test
 
 ```sh
 nvm use
 npm ci
-npm run generate
 npm run verify
+```
+
+On native Windows, `npm config get os` must print `null`. If it prints `linux`, remove the stale
+override and reinstall the platform-specific optional packages from the committed lockfile:
+
+```cmd
+npm config delete os --location=user
+npm config delete os --location=global
+git restore package-lock.json
+rmdir /s /q node_modules
+npm ci
 ```
 
 Useful focused commands:
@@ -166,6 +179,15 @@ npm run build
 npm run package
 ```
 
+`npm run test:web` downloads and starts the VS Code web test host. VS Code may print transient
+filesystem-provider and built-in extension warnings during startup; a successful run ends with
+`VS Code web extension tests passed.` `npm run test:vsix` is self-contained: it builds the VSIX,
+verifies its checksum, installs it into clean desktop and browser hosts, and runs both smoke tests.
+`npm run test:remote` also builds the VSIX, then runs VS Code locally against an ephemeral Linux
+container over SSH. Native Windows works with Docker Desktop in Linux containers mode;
+`docker info --format "{{.OSType}}"` must print `linux`. The command also requires `ssh` and
+`ssh-keygen` on PATH.
+
 The repository uses native TypeScript 7 for compilation. TypeScript 6 is installed only as the
 compatibility API consumed by typed ESLint while TypeScript 7.0 has no programmatic compiler API.
 Runtime code uses ESM source, strict host-specific projects, npm workspaces, and four independent
@@ -182,16 +204,16 @@ test                     grammar, architecture, package, and host-level tests
 
 `data/directives.yaml` generates the grammar keyword expression, completion and hover tables,
 semantic metadata, snippets, and [directive reference](docs/directives.md). Run `npm run generate`
-after reviewed data changes and commit every generated consumer. `npm run check:generated` rejects
-drift.
+only after reviewed data changes and commit every generated consumer. `npm run check:generated`
+rejects drift.
 
 The complete product and technical rationale is in [docs/design.md](docs/design.md).
 
 ## Status and contributing
 
-Version 0.1.6 begins the public pre-release period before stable 1.0. Contributions should preserve
-browser/desktop parity, lossless script bodies, conservative diagnostics, bounded resource use, and
-generated language-data consistency. See [CONTRIBUTING.md](CONTRIBUTING.md),
+Version 0.1.7 continues the public pre-release period before stable 1.0. Contributions should
+preserve browser/desktop parity, lossless script bodies, conservative diagnostics, bounded resource
+use, and generated language-data consistency. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), and the [release checklist](docs/release-checklist.md).
 
 This project is distributed under the [MIT License](LICENSE) and publishes as

@@ -5,12 +5,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-12
+
 ### Fixed
 
 - Marketplace release verification now waits for service validation and retries only transient
   installation-feed propagation failures.
 - Native Windows verification uses Git for Windows Bash for workflow syntax checks and expects the
   platform's `NUL` device during installed-validator tests.
+- Files resolved through `include` are assigned the Logrotate language when opened, and their
+  diagnostics are republished immediately so editor squiggles appear without changing tabs.
+- Native process-tree coverage is deterministic across Windows and Unix, successful web tests now
+  end with an explicit confirmation, and `npm run test:vsix` builds its required package first.
+- The Remote SSH smoke test supports native Windows with Docker Desktop's Linux engine and uses
+  host-specific VS Code launch and OpenSSH behavior.
 
 ## [0.1.6] - 2026-08-12
 
@@ -70,7 +78,8 @@ creation.
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.6
 [0.1.5]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.5
 [0.1.4]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.4

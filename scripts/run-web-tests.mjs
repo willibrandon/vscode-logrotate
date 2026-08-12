@@ -12,3 +12,5 @@ await runTests({
   quality: process.env.VSCODE_WEB_QUALITY === "insiders" ? "insiders" : "stable",
   testRunnerDataDir: resolve(root, ".vscode-test-web"),
 });
+
+process.stdout.write("VS Code web extension tests passed.\n");

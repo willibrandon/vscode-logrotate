@@ -67,7 +67,7 @@ jobs:
       - run: npm run check:licenses
       - run: npm run check:package
       - run: node ./scripts/build-release-artifacts.mjs
-      - run: npm run test:vsix
+      - run: npm run test:vsix:prepared
       - name: Stage candidate artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -103,6 +103,7 @@ jobs:
         run: >-
           npm exec -- vitest run test/policy/workflow-security.test.ts
           packages/vscode-client/test/external-validator.test.ts
+          scripts/test/remote-smoke-host.test.ts
       - run: npm run test:integration
         env:
           VSCODE_VERSION: ${{ matrix.vscode }}
@@ -190,7 +191,7 @@ jobs:
         with:
           name: release-candidate
           path: dist
-      - run: npm run test:remote
+      - run: npm run test:remote:prepared
       - name: Upload remote extension-host evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -1,23 +1,23 @@
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
+import { downloadAndUnzipVSCode, runVSCodeCommand } from "@vscode/test-electron";
 import {
-  downloadAndUnzipVSCode,
-  resolveCliPathFromVSCodeExecutablePath,
-} from "@vscode/test-electron";
+  createRemoteCodeLaunch,
+  requireLinuxDockerEngine,
+  sshConfigPath,
+  sshNullDevice,
+} from "./remote-smoke-host.mjs";
 
 const executeFile = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const vsix = resolve(root, process.env.VSIX_PATH ?? `dist/logrotate-${manifest.version}.vsix`);
 const remoteSshVersion = "0.124.0";
-if (process.platform !== "linux") {
-  throw new Error("The Remote SSH smoke test requires a Linux Docker host.");
-}
 const temporaryRoot = await mkdtemp(join(tmpdir(), "vscode-logrotate-remote-"));
 const artifactDirectory = resolve(root, "dist/remote-smoke");
 const container = `vscode-logrotate-remote-${process.pid}`;
@@ -47,7 +47,12 @@ try {
       mkdir(artifactDirectory, { recursive: true }),
     ),
   ]);
-  await run("docker", ["info"]);
+  const { stdout: dockerOperatingSystem } = await run("docker", [
+    "info",
+    "--format",
+    "{{.OSType}}",
+  ]);
+  requireLinuxDockerEngine(dockerOperatingSystem);
   await run("docker", [
     "build",
     "--file",
@@ -90,15 +95,15 @@ try {
       "  HostName 127.0.0.1",
       `  Port ${port}`,
       "  User vscode",
-      `  IdentityFile ${key}`,
+      `  IdentityFile ${sshConfigPath(key)}`,
       "  IdentitiesOnly yes",
       "  StrictHostKeyChecking no",
-      "  UserKnownHostsFile /dev/null",
+      `  UserKnownHostsFile ${sshNullDevice(process.platform)}`,
       "",
     ].join("\n"),
     "utf8",
   );
-  await chmod(sshConfig, 0o600);
+  if (process.platform !== "win32") await chmod(sshConfig, 0o600);
   await run("ssh", ["-F", sshConfig, "-o", "BatchMode=yes", "logrotate-ci", "true"]);
   const settings = `${JSON.stringify(
     {
@@ -128,10 +133,8 @@ try {
 
   const version = process.env.VSCODE_VERSION ?? "stable";
   const vscodeExecutable = await downloadAndUnzipVSCode(version);
-  const vscodeCli = resolveCliPathFromVSCodeExecutablePath(vscodeExecutable);
   const commandEnvironment = { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" };
-  await run(
-    vscodeCli,
+  await runCodeCommand(
     [
       "--user-data-dir",
       bootstrapUserDataDirectory,
@@ -141,11 +144,14 @@ try {
       `ms-vscode-remote.remote-ssh@${remoteSshVersion}`,
       "--force",
     ],
-    { env: commandEnvironment },
+    version,
+    commandEnvironment,
   );
-  const { stdout: versionOutput } = await run(vscodeCli, ["--version"], {
-    env: commandEnvironment,
-  });
+  const { stdout: versionOutput } = await runCodeCommand(
+    ["--version", "--user-data-dir", bootstrapUserDataDirectory],
+    version,
+    commandEnvironment,
+  );
   const [, commit] = versionOutput.trim().split(/\r?\n/u);
   if (!/^[0-9a-f]{40}$/u.test(commit ?? "")) {
     throw new Error(
@@ -318,39 +324,42 @@ async function packageProbe(output) {
 }
 
 function launchRemoteCode(executable, userData, extensions, remotePath) {
-  return spawn(
-    "xvfb-run",
-    [
-      "-a",
-      executable,
-      "--no-sandbox",
-      "--disable-gpu-sandbox",
-      "--no-cached-data",
-      "--disable-workspace-trust",
-      "--user-data-dir",
-      userData,
-      "--extensions-dir",
-      extensions,
-      "--new-window",
-      "--remote",
-      "ssh-remote+logrotate-ci",
-      remotePath,
-      "--disable-updates",
-      "--skip-welcome",
-      "--skip-release-notes",
-    ],
-    {
-      cwd: root,
-      detached: true,
-      env: { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" },
-      shell: false,
-      stdio: "inherit",
-    },
-  );
+  const launch = createRemoteCodeLaunch(process.platform, executable, [
+    "--no-cached-data",
+    "--disable-workspace-trust",
+    "--user-data-dir",
+    userData,
+    "--extensions-dir",
+    extensions,
+    "--new-window",
+    "--remote",
+    "ssh-remote+logrotate-ci",
+    remotePath,
+    "--disable-updates",
+    "--skip-welcome",
+    "--skip-release-notes",
+  ]);
+  return spawn(launch.command, launch.arguments, {
+    cwd: root,
+    detached: true,
+    env: { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" },
+    shell: false,
+    stdio: "inherit",
+    windowsHide: true,
+  });
 }
 
 async function stop(child) {
   if (child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === "win32" && child.pid !== undefined) {
+    await executeFile("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+      cwd: root,
+      maxBuffer: 1024 * 1024,
+      timeout: 10_000,
+    }).catch(() => child.kill());
+    await Promise.race([once(child, "exit"), delay(5_000)]);
+    return;
+  }
   if (child.pid !== undefined) {
     try {
       process.kill(-child.pid, "SIGTERM");
@@ -413,14 +422,7 @@ async function collectFailureEvidence(error) {
       bootstrap: await collectLocalLogs(bootstrapUserDataDirectory),
       smoke: await collectLocalLogs(userDataDirectory),
     },
-    localLogFiles: await capture("find", [
-      userDataDirectory,
-      "-maxdepth",
-      "10",
-      "-type",
-      "f",
-      "-print",
-    ]),
+    localLogFiles: await listFiles(userDataDirectory),
   };
   await writeFile(
     resolve(artifactDirectory, "failure.json"),
@@ -432,15 +434,22 @@ async function collectFailureEvidence(error) {
 
 async function collectLocalLogs(profileDirectory) {
   const logsDirectory = resolve(profileDirectory, "logs");
-  const listing = await capture("find", [logsDirectory, "-type", "f", "-print"]);
   const logs = {};
-  for (const path of listing?.split(/\r?\n/u) ?? []) {
-    if (!path.startsWith(`${logsDirectory}/`)) continue;
-    logs[path.slice(temporaryRoot.length + 1)] = await readFile(path, "utf8").catch((error) =>
-      String(error),
-    );
+  for (const path of await listFiles(logsDirectory)) {
+    logs[path.slice(temporaryRoot.length + 1)] = await readFile(path, "utf8").catch(String);
   }
   return logs;
+}
+
+async function listFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  const nested = await Promise.all(
+    entries.map((entry) => {
+      const path = resolve(directory, entry.name);
+      return entry.isDirectory() ? listFiles(path) : Promise.resolve([path]);
+    }),
+  );
+  return nested.flat();
 }
 
 async function findRemoteCodeServer(containerName, commit) {
@@ -560,6 +569,16 @@ async function run(command, arguments_, options = {}) {
     env: options.env ?? process.env,
     maxBuffer: 8 * 1024 * 1024,
     timeout: 300_000,
+  });
+  process.stdout.write(result.stdout);
+  process.stderr.write(result.stderr);
+  return result;
+}
+
+async function runCodeCommand(arguments_, version, environment) {
+  const result = await runVSCodeCommand(arguments_, {
+    spawn: { env: environment },
+    version,
   });
   process.stdout.write(result.stdout);
   process.stderr.write(result.stderr);

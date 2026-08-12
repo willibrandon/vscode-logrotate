@@ -6,7 +6,7 @@ import {
   clientOptions,
   registerCommonCommands,
   registerFileSystemBridge,
-  registerLoadedIncludeWatching,
+  registerLoadedIncludeSupport,
 } from "./common.js";
 import {
   canDetectTargetVersion,
@@ -37,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
   registerFileSystemBridge(context, { client, output });
-  registerLoadedIncludeWatching(context, { client, output });
+  registerLoadedIncludeSupport(context, { client, output });
   const diagnostics = vscode.languages.createDiagnosticCollection("logrotate-installed");
   const activeValidations = new Map<string, AbortController>();
   let versionDetection: AbortController | undefined;

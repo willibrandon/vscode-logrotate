@@ -25,7 +25,7 @@ suite("Logrotate desktop extension", () => {
 
     const installedPathPrefix = process.env["EXPECTED_INSTALLED_EXTENSION_PATH_PREFIX"];
     if (installedPathPrefix !== undefined) {
-      assert.equal(manifest.version, "0.1.6");
+      assert.equal(manifest.version, "0.1.7");
       assert.ok(
         extension.extensionPath.startsWith(installedPathPrefix),
         `expected packaged extension under ${installedPathPrefix}, received ${extension.extensionPath}`,
@@ -43,11 +43,20 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.languageId, "logrotate");
     await vscode.window.showTextDocument(document);
     const diagnostics = await waitForDiagnostics(includedUri);
-
+    const unknownDirective = diagnostics.find(({ code }) => code === "LR1001");
     assert.ok(
-      diagnostics.some(({ code }) => code === "LR1001"),
+      unknownDirective,
       `expected LR1001 for included.conf, received ${JSON.stringify(diagnostics)}`,
     );
+
+    const includedDocument = await vscode.workspace.openTextDocument(includedUri);
+    await vscode.window.showTextDocument(includedDocument);
+    const associatedDocument = await waitForLanguage(includedUri, "logrotate");
+    assert.equal(associatedDocument.languageId, "logrotate");
+    const openedDiagnostics = await waitForDiagnostics(includedUri);
+    const openedUnknownDirective = openedDiagnostics.find(({ code }) => code === "LR1001");
+    assert.ok(openedUnknownDirective, "expected LR1001 after included.conf opened in the editor");
+    assert.deepEqual(openedUnknownDirective.range, new vscode.Range(1, 4, 1, 10));
   });
 
   test("recognizes an extensionless configuration from its content", async () => {
@@ -175,4 +184,16 @@ async function waitForDiagnostics(uri: vscode.Uri): Promise<readonly vscode.Diag
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return vscode.languages.getDiagnostics(uri);
+}
+
+async function waitForLanguage(uri: vscode.Uri, languageId: string): Promise<vscode.TextDocument> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const document = vscode.workspace.textDocuments.find(
+      (candidate) => candidate.uri.toString() === uri.toString(),
+    );
+    if (document?.languageId === languageId) return document;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Timed out waiting for ${uri.toString()} to use ${languageId}.`);
 }

@@ -92,19 +92,20 @@ describe("workflow supply-chain policy", () => {
     const ci = workflow("ci.yml");
     const remoteDockerfile = await readFile(resolve(root, "test/remote/Dockerfile"), "utf8");
     const remoteRunner = await readFile(resolve(root, "scripts/run-remote-ssh-smoke.mjs"), "utf8");
+    const remoteHost = await readFile(resolve(root, "scripts/remote-smoke-host.mjs"), "utf8");
     expect(ci).toContain("os: [ubuntu-latest, macos-latest, windows-latest]");
     expect(ci).toContain("vscode: [1.102.0, stable]");
     expect(ci).toContain("Verify native Windows unit and policy behavior");
     expect(ci).toContain("matrix.os == 'windows-latest' && matrix.vscode == 'stable'");
     expect(ci).toMatch(
-      /npm exec -- vitest run test\/policy\/workflow-security\.test\.ts\s+packages\/vscode-client\/test\/external-validator\.test\.ts/u,
+      /npm exec -- vitest run test\/policy\/workflow-security\.test\.ts\s+packages\/vscode-client\/test\/external-validator\.test\.ts\s+scripts\/test\/remote-smoke-host\.test\.ts/u,
     );
     expect(ci).toContain("npm run test:web");
-    expect(ci).toContain("npm run test:vsix");
+    expect(ci).toContain("npm run test:vsix:prepared");
     expect(ci).toContain("dist/test/desktop/extension.test.cjs");
     expect(ci).toContain("dist/test/web/index.cjs");
     expect(ci).toMatch(/remote_ssh:[\s\S]*name: Remote SSH host[\s\S]*needs: package/u);
-    expect(ci).toContain("npm run test:remote");
+    expect(ci).toContain("npm run test:remote:prepared");
     expect(ci).toContain("name: remote-ssh-smoke");
     expect(ci).toMatch(/Upload remote extension-host evidence\n\s+if: always\(\)/u);
     expect(ci).toContain("ref: 3be1e9ccffe0c2245ed596183c74913d553f9f18");
@@ -115,9 +116,11 @@ describe("workflow supply-chain policy", () => {
     expect(remoteRunner).toContain("findRemoteCodeServer");
     expect(remoteRunner).toContain("bootstrapUserDataDirectory");
     expect(remoteRunner).toContain('"BatchMode=yes"');
+    expect(remoteRunner).toContain('"{{.OSType}}"');
+    expect(remoteRunner).not.toContain('process.platform !== "linux"');
     expect(remoteRunner).toContain("300_000");
     expect(remoteRunner).toMatch(/launchRemoteCode\(\s+vscodeExecutable,/u);
-    expect(remoteRunner).toContain('"--disable-gpu-sandbox"');
+    expect(remoteHost).toContain('"--disable-gpu-sandbox"');
     expect(remoteRunner).toContain("/dist/nodeServer.cjs");
     expect(remoteRunner).toContain("[logrotate 3.22.0 on this host]");
     expect(remoteRunner).not.toContain("secrets.");

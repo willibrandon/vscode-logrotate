@@ -1,12 +1,15 @@
 import { Buffer } from "node:buffer";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
+import { promisify } from "node:util";
 import { runTests as runWebTests } from "@vscode/test-web";
 import yauzl from "yauzl";
 import { runInstalledDesktopSmoke } from "./run-installed-desktop-smoke.mjs";
 
+const execute = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const version = process.env.VSCODE_VERSION ?? "stable";
@@ -14,6 +17,13 @@ const vsix = resolve(root, process.env.VSIX_PATH ?? `dist/logrotate-${manifest.v
 const checksum = resolve(root, `dist/logrotate-${manifest.version}.sha256`);
 const desktopTests = resolve(root, "dist/test/desktop/extension.test.cjs");
 const webTests = resolve(root, "dist/test/web/index.cjs");
+const { stdout: sourceRevisionOutput } = await execute("git", ["rev-parse", "HEAD"], {
+  cwd: root,
+});
+const sourceRevision = sourceRevisionOutput.trim();
+if (!/^[0-9a-f]{40}$/u.test(sourceRevision)) {
+  throw new Error(`Unable to determine the source revision, received ${sourceRevision}.`);
+}
 await Promise.all([requireFile(desktopTests), requireFile(webTests)]);
 const digest = createHash("sha256")
   .update(await readFile(vsix))
@@ -54,6 +64,7 @@ try {
   });
 
   await extractPackagedExtension(vsix, browserExtensionDirectory);
+  await requirePackagedReadmeImages(browserExtensionDirectory, sourceRevision);
   await mkdir(dirname(packagedWebTests), { recursive: true });
   await writeFile(packagedWebTests, await readFile(webTests));
   await runWebTests({
@@ -77,6 +88,20 @@ async function requireFile(path) {
     if (!(await stat(path)).isFile()) throw new Error(`${path} is not a file.`);
   } catch (error) {
     throw new Error(`Package smoke test bundle is missing: ${path}`, { cause: error });
+  }
+}
+
+async function requirePackagedReadmeImages(extensionDirectory, sourceRevision) {
+  const readme = await readFile(resolve(extensionDirectory, "readme.md"), "utf8");
+  const expectedPreview = `https://github.com/willibrandon/vscode-logrotate/raw/${sourceRevision}/docs/images/dark-plus.png`;
+  if (!readme.includes(`](${expectedPreview})`)) {
+    throw new Error(`Packaged README does not use the immutable preview URL ${expectedPreview}.`);
+  }
+  for (const match of readme.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/gu)) {
+    const target = match[1];
+    if (target === undefined || !target.startsWith("https://")) {
+      throw new Error(`Packaged README image is not an HTTPS URL: ${target ?? "missing"}.`);
+    }
   }
 }
 

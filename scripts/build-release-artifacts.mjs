@@ -16,13 +16,26 @@ if (!Number.isSafeInteger(minorVersion)) {
   throw new Error(`Extension version must be major.minor.patch, received ${manifest.version}.`);
 }
 const preRelease = minorVersion % 2 === 1;
+const { stdout: sourceRevisionOutput } = await execute("git", ["rev-parse", "HEAD"], {
+  cwd: root,
+});
+const sourceRevision = sourceRevisionOutput.trim();
+if (!/^[0-9a-f]{40}$/u.test(sourceRevision)) {
+  throw new Error(`Unable to determine the source revision, received ${sourceRevision}.`);
+}
 
 await Promise.all([
   rm(vsix, { force: true }),
   rm(sbom, { force: true }),
   rm(checksum, { force: true }),
 ]);
-await createVSIX({ cwd: root, packagePath: vsix, dependencies: false, preRelease });
+await createVSIX({
+  cwd: root,
+  packagePath: vsix,
+  dependencies: false,
+  githubBranch: sourceRevision,
+  preRelease,
+});
 await execute(
   process.execPath,
   [

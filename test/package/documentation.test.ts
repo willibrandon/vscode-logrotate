@@ -92,6 +92,10 @@ describe("documentation contract", () => {
       expect(bytes.byteLength, image).toBeLessThan(100_000);
       expect(evidence, image).toContain(`images/${image}`);
     }
+    const packagedFiles = JSON.parse(
+      await readFile(resolve(root, "scripts/package-files.json"), "utf8"),
+    ) as string[];
+    expect(packagedFiles).not.toContain("docs/images/dark-plus.png");
   });
 
   it("resolves every relative Markdown link in maintained prose", async () => {

@@ -97,6 +97,7 @@ try {
     "utf8",
   );
   await chmod(sshConfig, 0o600);
+  await run("ssh", ["-F", sshConfig, "-o", "BatchMode=yes", "logrotate-ci", "true"]);
   await writeFile(
     resolve(userDataDirectory, "User/settings.json"),
     `${JSON.stringify(
@@ -149,17 +150,25 @@ try {
       `Unable to determine the VS Code commit from ${JSON.stringify(versionOutput)}.`,
     );
   }
-  const codeServer = `/home/vscode/.vscode-server/bin/${commit}/bin/code-server`;
-
   bootstrapProcess = launchRemoteCode(
     vscodeCli,
     userDataDirectory,
     extensionsDirectory,
     "/home/vscode/workspace",
   );
-  await waitFor(
-    async () => commandSucceeds("docker", ["exec", container, "test", "-x", codeServer]),
-    120_000,
+  const codeServer = await waitForValue(
+    async () => {
+      if (
+        bootstrapProcess !== undefined &&
+        (bootstrapProcess.exitCode !== null || bootstrapProcess.signalCode !== null)
+      ) {
+        throw new Error(
+          `VS Code exited with ${bootstrapProcess.exitCode ?? bootstrapProcess.signalCode} before the remote server started.`,
+        );
+      }
+      return findRemoteCodeServer(container, commit);
+    },
+    300_000,
     "VS Code Server bootstrap",
   );
   await stop(bootstrapProcess);
@@ -240,6 +249,9 @@ try {
   console.log(
     `Verified ${extensionIdentifier}@${manifest.version} in an ephemeral Remote SSH extension host.`,
   );
+} catch (error) {
+  await collectFailureEvidence(error);
+  throw error;
 } finally {
   await Promise.allSettled([
     bootstrapProcess === undefined ? Promise.resolve() : stop(bootstrapProcess),
@@ -376,6 +388,58 @@ async function copyLanguageServerLog(containerName, destination) {
   ]);
 }
 
+async function collectFailureEvidence(error) {
+  const evidence = {
+    error: error instanceof Error ? error.stack : String(error),
+    containerLogs: containerStarted ? await capture("docker", ["logs", container]) : undefined,
+    remoteServerTree: containerStarted
+      ? await capture("docker", [
+          "exec",
+          container,
+          "find",
+          "/home/vscode/.vscode-server",
+          "-maxdepth",
+          "8",
+          "-printf",
+          "%M %s %p\\n",
+        ])
+      : undefined,
+    localLogFiles: await capture("find", [
+      userDataDirectory,
+      "-maxdepth",
+      "10",
+      "-type",
+      "f",
+      "-print",
+    ]),
+  };
+  await writeFile(
+    resolve(artifactDirectory, "failure.json"),
+    `${JSON.stringify(evidence, undefined, 2)}\n`,
+    "utf8",
+  ).catch(() => undefined);
+  process.stderr.write(`${evidence.remoteServerTree ?? ""}\n`);
+}
+
+async function findRemoteCodeServer(containerName, commit) {
+  const listing = await capture("docker", [
+    "exec",
+    containerName,
+    "find",
+    "/home/vscode/.vscode-server",
+    "-type",
+    "f",
+    "-name",
+    "code-server",
+    "-executable",
+    "-print",
+  ]);
+  return listing
+    ?.split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.includes(commit));
+}
+
 function validateResult(result) {
   if (typeof result !== "object" || result === null || result.ok !== true) {
     throw new Error(`Remote smoke assertions failed: ${JSON.stringify(result)}.`);
@@ -427,6 +491,16 @@ async function waitFor(predicate, timeoutMilliseconds, description) {
   throw new Error(`Timed out waiting for ${description}.`);
 }
 
+async function waitForValue(probe, timeoutMilliseconds, description) {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (Date.now() < deadline) {
+    const value = await probe();
+    if (value !== undefined) return value;
+    await delay(500);
+  }
+  throw new Error(`Timed out waiting for ${description}.`);
+}
+
 async function commandSucceeds(command, arguments_) {
   try {
     await executeFile(command, arguments_, {
@@ -437,6 +511,24 @@ async function commandSucceeds(command, arguments_) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function capture(command, arguments_) {
+  try {
+    const result = await executeFile(command, arguments_, {
+      cwd: root,
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: 30_000,
+    });
+    return `${result.stdout}${result.stderr}`;
+  } catch (error) {
+    if (typeof error === "object" && error !== null) {
+      const stdout = "stdout" in error ? String(error.stdout) : "";
+      const stderr = "stderr" in error ? String(error.stderr) : "";
+      return `${stdout}${stderr}`;
+    }
+    return String(error);
   }
 }
 

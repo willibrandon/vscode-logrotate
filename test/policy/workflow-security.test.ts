@@ -76,11 +76,15 @@ describe("workflow supply-chain policy", () => {
     expect(ci).toMatch(/remote_ssh:[\s\S]*name: Remote SSH host[\s\S]*needs: package/u);
     expect(ci).toContain("npm run test:remote");
     expect(ci).toContain("name: remote-ssh-smoke");
+    expect(ci).toMatch(/Upload remote extension-host evidence\n\s+if: always\(\)/u);
     expect(ci).toContain("ref: 3be1e9ccffe0c2245ed596183c74913d553f9f18");
     expect(ci).toMatch(/insiders:[\s\S]*continue-on-error: true/u);
     expect(remoteDockerfile).toMatch(/^FROM debian:trixie-slim@sha256:[0-9a-f]{64}$/mu);
     expect(remoteRunner).toContain('"ssh-remote"');
     expect(remoteRunner).toContain("expectedRemoteExtensionPath");
+    expect(remoteRunner).toContain("findRemoteCodeServer");
+    expect(remoteRunner).toContain('"BatchMode=yes"');
+    expect(remoteRunner).toContain("300_000");
     expect(remoteRunner).toContain("/dist/nodeServer.cjs");
     expect(remoteRunner).toContain("[logrotate 3.22.0 on this host]");
     expect(remoteRunner).not.toContain("secrets.");

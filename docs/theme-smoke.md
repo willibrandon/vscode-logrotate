@@ -5,6 +5,8 @@ colors. `npm run capture:themes` opens the real extension in VS Code for the Web
 at `test/fixtures/workspace/theme-preview.logrotate`, selects each theme through VS Code, and saves
 headless Chromium screenshots.
 
+Screenshots are captured at 2× device scale so they remain sharp on high-density displays.
+
 The 2026-08-12 review used VS Code 1.132.1 and checked that comments remain legible; paths,
 directives, numbers, modes, users, and groups remain distinguishable; braces stay structural; and
 the embedded script region follows shell highlighting.

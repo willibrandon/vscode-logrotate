@@ -121,7 +121,9 @@ describe("documentation contract", () => {
 
     for (const [path, source] of documents) {
       const body = source.replace(/^---\n[\s\S]*?\n---\n/u, "");
-      expect(body, `${path} contains an internal Markdown heading`).not.toMatch(/^#{1,6}\s/mu);
+      expect(body, `${path} has no section headings`).toMatch(/^##\s/mu);
+      expect(body, `${path} contains an extra top-level heading`).not.toMatch(/^#\s/mu);
+      expect(body, `${path} contains an overly nested heading`).not.toMatch(/^#{3,6}\s/mu);
       expect(body, `${path} contains a Markdown list`).not.toMatch(/^\s*[-*+]\s/mu);
       expect(source, `${path} contains a dash character outside plain punctuation`).not.toMatch(
         /[–—]/u,
@@ -134,6 +136,10 @@ describe("documentation contract", () => {
 
   it("configures the user site for its GitHub Pages subpath", async () => {
     const config = await readFile(resolve(root, "docs-site/astro.config.mjs"), "utf8");
+    const gettingStarted = await readFile(
+      resolve(root, "docs-site/src/content/docs/getting-started.md"),
+      "utf8",
+    );
     const manifest = JSON.parse(
       await readFile(resolve(root, "docs-site/package.json"), "utf8"),
     ) as Readonly<Record<string, unknown>>;
@@ -141,6 +147,11 @@ describe("documentation contract", () => {
     expect(config).toContain('site: "https://willibrandon.github.io"');
     expect(config).toContain('base: "/vscode-logrotate"');
     expect(config).toContain('trailingSlash: "always"');
+    expect(config).toContain('layout: "constrained"');
+    expect(config).toContain("responsiveStyles: true");
+    expect(config).toContain('"../syntaxes/logrotate.tmLanguage.json"');
+    expect(config).toContain("langs: [logrotateLanguage]");
+    expect(gettingStarted).toContain("```logrotate");
     expect(manifest).toMatchObject({ private: true, packageManager: "npm@11.17.0" });
   });
 
@@ -148,13 +159,13 @@ describe("documentation contract", () => {
     const readme = await readFile(resolve(root, "README.md"), "utf8");
     const evidence = await readFile(resolve(root, "docs/theme-smoke.md"), "utf8");
 
-    expect(readme).toContain("docs/images/dark-plus.png");
+    expect(readme).toContain("docs/images/dracula.png");
     expect(readme).toContain("docs/theme-smoke.md");
     for (const image of themeImages) {
       const bytes = await readFile(resolve(root, "docs/images", image));
       expect(bytes.subarray(0, 8).toString("hex"), image).toBe("89504e470d0a1a0a");
-      expect(bytes.readUInt32BE(16), image).toBe(1_000);
-      expect(bytes.readUInt32BE(20), image).toBe(310);
+      expect(bytes.readUInt32BE(16), image).toBe(2_000);
+      expect(bytes.readUInt32BE(20), image).toBe(620);
       expect(bytes.byteLength, image).toBeLessThan(100_000);
       expect(evidence, image).toContain(`images/${image}`);
     }

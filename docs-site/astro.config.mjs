@@ -1,11 +1,21 @@
 import { defineConfig } from "astro/config";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
+import logrotateGrammar from "../syntaxes/logrotate.tmLanguage.json" with { type: "json" };
+
+const logrotateLanguage = {
+  ...logrotateGrammar,
+  name: "logrotate",
+};
 
 export default defineConfig({
   site: "https://willibrandon.github.io",
   base: "/vscode-logrotate",
   trailingSlash: "always",
+  image: {
+    layout: "constrained",
+    responsiveStyles: true,
+  },
   integrations: [
     starlight({
       title: "Logrotate",
@@ -13,7 +23,14 @@ export default defineConfig({
       favicon: "/favicon.svg",
       customCss: ["./src/styles/docs.css"],
       credits: false,
-      tableOfContents: false,
+      components: {
+        MarkdownContent: "./src/components/MarkdownContent.astro",
+      },
+      expressiveCode: {
+        shiki: {
+          langs: [logrotateLanguage],
+        },
+      },
       social: [
         {
           icon: "github",

@@ -2,7 +2,6 @@
   --sl-color-accent-low: #102f50;
   --sl-color-accent: #70baff;
   --sl-color-accent-high: #d8edff;
-  --sl-content-width: 48rem;
 }
 
 :root[data-theme="light"] {
@@ -11,8 +10,10 @@
   --sl-color-accent-high: #082d52;
 }
 
-.sl-markdown-content p {
-  max-width: 72ch;
+.sl-markdown-content
+  :not(h1, h2, h3, h4, h5, h6, .sl-heading-wrapper)
+  + .sl-heading-wrapper.level-h2 {
+  margin-top: 0.75em;
 }
 
 .sl-markdown-content img {

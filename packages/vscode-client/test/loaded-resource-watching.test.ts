@@ -99,11 +99,22 @@ const vscodeMock = vi.hoisted(() => {
   }
 
   const watchers: FakeWatcher[] = [];
+  const textDocuments: { readonly uri: FakeUri; languageId: string }[] = [];
+  const languageChanges: { readonly uri: string; readonly languageId: string }[] = [];
+  const documentOpenListeners: ((document: (typeof textDocuments)[number]) => void)[] = [];
   let rejectedWatcherPattern: string | undefined;
   return {
     FakeRelativePattern,
     FakeUri,
+    languageChanges,
+    textDocuments,
     watchers,
+    openDocument(uri: string, languageId: string): (typeof textDocuments)[number] {
+      const document = { uri: new FakeUri(uri), languageId };
+      textDocuments.push(document);
+      for (const listener of documentOpenListeners) listener(document);
+      return document;
+    },
     rejectWatcherPattern(pattern: string | undefined): void {
       rejectedWatcherPattern = pattern;
     },
@@ -118,7 +129,18 @@ const vscodeMock = vi.hoisted(() => {
         },
       },
       RelativePattern: FakeRelativePattern,
+      languages: {
+        setTextDocumentLanguage(
+          document: (typeof textDocuments)[number],
+          languageId: string,
+        ): Promise<(typeof textDocuments)[number]> {
+          document.languageId = languageId;
+          languageChanges.push({ uri: document.uri.toString(), languageId });
+          return Promise.resolve(document);
+        },
+      },
       workspace: {
+        textDocuments,
         createFileSystemWatcher(pattern: FakeRelativePattern | string): FakeWatcher {
           if (
             rejectedWatcherPattern !== undefined &&
@@ -131,6 +153,17 @@ const vscodeMock = vi.hoisted(() => {
           const watcher = new FakeWatcher(pattern);
           watchers.push(watcher);
           return watcher;
+        },
+        onDidOpenTextDocument(listener: (document: (typeof textDocuments)[number]) => void): {
+          dispose(): void;
+        } {
+          documentOpenListeners.push(listener);
+          return {
+            dispose(): void {
+              const index = documentOpenListeners.indexOf(listener);
+              if (index >= 0) documentOpenListeners.splice(index, 1);
+            },
+          };
         },
       },
     },
@@ -179,12 +212,14 @@ class FakeLanguageClient {
 
 describe("loaded include watching", () => {
   beforeEach(() => {
+    vscodeMock.languageChanges.length = 0;
+    vscodeMock.textDocuments.length = 0;
     vscodeMock.watchers.length = 0;
     vscodeMock.rejectWatcherPattern(undefined);
   });
 
-  it("deduplicates shared local resources, ignores virtual resources, refreshes every event, and disposes exactly once", async () => {
-    const { registerLoadedIncludeWatching } = await import("../src/common.js");
+  it("assigns included-file languages, watches local resources, refreshes every event, and disposes exactly once", async () => {
+    const { registerLoadedIncludeSupport } = await import("../src/common.js");
     const client = new FakeLanguageClient();
     const subscriptions: { dispose(): void }[] = [];
     const warnings: string[] = [];
@@ -206,18 +241,31 @@ describe("loaded include watching", () => {
     const third = "file:///etc/logrotate.d/third";
     const directory = "file:///etc/logrotate.d";
     const special = "file:///etc/logrotate.d/name%5Bprod%5D*%3F.conf";
+    const virtual = "git:/deployment/logrotate.conf?ref=main";
 
-    registerLoadedIncludeWatching(context as never, runtime as never);
+    registerLoadedIncludeSupport(context as never, runtime as never);
+    const alreadyOpen = vscodeMock.openDocument(first, "properties");
     client.receive(loadedIncludesNotification, {
       rootUri: "file:///etc/logrotate.conf",
       resources: [
         { uri: first, type: "file" },
         { uri: directory, type: "directory" },
         { uri: special, type: "file" },
-        { uri: "git:/deployment/logrotate.conf?ref=main", type: "file" },
+        { uri: virtual, type: "file" },
         { uri: "vscode-remote:/etc/logrotate.d/a", type: "file" },
       ],
     });
+    await Promise.resolve();
+    expect(alreadyOpen.languageId).toBe("logrotate");
+    const openedLater = vscodeMock.openDocument(virtual, "properties");
+    const unrelated = vscodeMock.openDocument("file:///workspace/other.conf", "properties");
+    await Promise.resolve();
+    expect(openedLater.languageId).toBe("logrotate");
+    expect(unrelated.languageId).toBe("properties");
+    expect(vscodeMock.languageChanges).toEqual([
+      { uri: first, languageId: "logrotate" },
+      { uri: virtual, languageId: "logrotate" },
+    ]);
     expect(vscodeMock.watchers).toHaveLength(3);
     const firstWatcher = vscodeMock.watchers[0];
     const directoryWatcher = vscodeMock.watchers[1];

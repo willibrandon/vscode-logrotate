@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ChildProcessWithoutNullStreams, SpawnOptionsWithoutStdio } from "node:child_process";
+import type { SpawnOptionsWithoutStdio } from "node:child_process";
 import { dirname } from "node:path";
 import process from "node:process";
 import { StringDecoder } from "node:string_decoder";
@@ -48,6 +48,23 @@ export interface ExternalValidationOptions {
   readonly isTrusted?: () => boolean;
 }
 
+export interface ProcessPlatformPolicy {
+  readonly detached: boolean;
+  readonly nullStatePath: string;
+}
+
+export interface ProcessTreeChild {
+  readonly exitCode: number | null;
+  readonly pid?: number | undefined;
+  readonly signalCode: NodeJS.Signals | null;
+  readonly kill: (signal: NodeJS.Signals) => boolean;
+}
+
+export interface ProcessTreeHost {
+  killProcessGroup(pid: number, signal: NodeJS.Signals): void;
+  setTimeout(callback: () => void, milliseconds: number): { unref(): void };
+}
+
 export function externalValidationSummary(result: ExternalValidationResult): string {
   if (result.timedOut) return "Installed logrotate validation timed out.";
   if (result.truncated) return "Installed logrotate validation exceeded its output limit.";
@@ -73,6 +90,23 @@ const versionDetectionLimits: ProcessLimits = {
   timeoutMilliseconds: 5_000,
   maxOutputBytes: 64 * 1024,
 };
+
+const runtimeProcessPolicy = processPlatformPolicy(process.platform);
+const nodeProcessTreeHost: ProcessTreeHost = {
+  killProcessGroup(pid, signal): void {
+    process.kill(pid, signal);
+  },
+  setTimeout(callback, milliseconds): NodeJS.Timeout {
+    return setTimeout(callback, milliseconds);
+  },
+};
+
+export function processPlatformPolicy(platform: NodeJS.Platform): ProcessPlatformPolicy {
+  return {
+    detached: platform !== "win32",
+    nullStatePath: platform === "win32" ? "NUL" : "/dev/null",
+  };
+}
 
 export async function detectInstalledLogrotateVersion(
   executable: string,
@@ -138,7 +172,7 @@ export class NodeProcessHost implements ProcessHost {
         });
         return;
       }
-      const detached = process.platform !== "win32";
+      const { detached } = runtimeProcessPolicy;
       const options: SpawnOptionsWithoutStdio = {
         shell: false,
         windowsHide: true,
@@ -162,14 +196,14 @@ export class NodeProcessHost implements ProcessHost {
         const remaining = Math.max(0, limits.maxOutputBytes - outputBytes);
         if (remaining === 0) {
           truncated = true;
-          terminateTree(child, detached);
+          terminateProcessTree(child, detached);
           return current;
         }
         const bytes = chunk.subarray(0, remaining);
         outputBytes += bytes.byteLength;
         if (bytes.byteLength < chunk.byteLength) {
           truncated = true;
-          terminateTree(child, detached);
+          terminateProcessTree(child, detached);
         }
         return `${current}${decoder.write(Buffer.from(bytes))}`;
       };
@@ -184,7 +218,7 @@ export class NodeProcessHost implements ProcessHost {
       const timeout = setTimeout(
         (): void => {
           timedOut = true;
-          terminateTree(child, detached);
+          terminateProcessTree(child, detached);
         },
         Math.max(1, limits.timeoutMilliseconds),
       );
@@ -192,7 +226,7 @@ export class NodeProcessHost implements ProcessHost {
 
       const abort = (): void => {
         cancelled = true;
-        terminateTree(child, detached);
+        terminateProcessTree(child, detached);
       };
       runOptions.signal?.addEventListener("abort", abort, { once: true });
 
@@ -233,25 +267,30 @@ function assertExecutableAllowed(options: ExternalValidationOptions): void {
   }
 }
 
-function terminateTree(child: ChildProcessWithoutNullStreams, detached: boolean): void {
+export function terminateProcessTree(
+  child: ProcessTreeChild,
+  detached: boolean,
+  host: ProcessTreeHost = nodeProcessTreeHost,
+): void {
   if (child.exitCode !== null || child.signalCode !== null) return;
-  signalProcess(child, detached, "SIGTERM");
-  const force = setTimeout((): void => {
+  signalProcess(child, detached, "SIGTERM", host);
+  const force = host.setTimeout((): void => {
     if (child.exitCode === null && child.signalCode === null) {
-      signalProcess(child, detached, "SIGKILL");
+      signalProcess(child, detached, "SIGKILL", host);
     }
   }, 500);
   force.unref();
 }
 
 function signalProcess(
-  child: ChildProcessWithoutNullStreams,
+  child: ProcessTreeChild,
   detached: boolean,
   signal: NodeJS.Signals,
+  host: ProcessTreeHost,
 ): void {
   if (detached && child.pid !== undefined) {
     try {
-      process.kill(-child.pid, signal);
+      host.killProcessGroup(-child.pid, signal);
       return;
     } catch {
       // The child may have exited between the status check and group signal.
@@ -261,5 +300,5 @@ function signalProcess(
 }
 
 function nullStatePath(): string {
-  return process.platform === "win32" ? "NUL" : "/dev/null";
+  return runtimeProcessPolicy.nullStatePath;
 }

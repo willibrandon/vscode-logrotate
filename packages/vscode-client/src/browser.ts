@@ -1,6 +1,11 @@
 import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/browser";
-import { clientOptions, registerCommonCommands, registerFileSystemBridge } from "./common.js";
+import {
+  clientOptions,
+  registerCommonCommands,
+  registerFileSystemBridge,
+  registerLoadedIncludeSupport,
+} from "./common.js";
 import { explainUnavailability } from "./external-validation-policy.js";
 
 let client: LanguageClient | undefined;
@@ -21,6 +26,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
   registerFileSystemBridge(context, { client, output });
+  registerLoadedIncludeSupport(context, { client, output });
   context.subscriptions.push(
     vscode.commands.registerCommand(
       "logrotate.validateWithInstalledLogrotate",

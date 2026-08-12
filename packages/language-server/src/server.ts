@@ -134,7 +134,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       pendingDiagnostics.delete(uri);
     }
   };
-  const scheduleDiagnostics = (document: TextDocument): void => {
+  const scheduleDiagnostics = (document: TextDocument, delayMilliseconds = 150): void => {
     cancelPending(document.uri);
     const version = document.version;
     const handle = timers.setTimeout((): void => {
@@ -163,7 +163,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       void job.finally((): void => {
         diagnosticJobs.delete(job);
       });
-    }, 150);
+    }, delayMilliseconds);
     pendingDiagnostics.set(document.uri, handle);
   };
   const scheduleAffectedRoots = (resourceUri: string, excludedRoot?: string): void => {
@@ -284,7 +284,10 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     connection.console.info(
       `[textDocument/didOpen] Opened ${formatResourceForLog(document.uri)} (${safeLogText(document.languageId)}, version ${document.version}).`,
     );
-    scheduleDiagnostics(document);
+    // Opening an included resource can expose diagnostics that were published while the resource
+    // was still closed. Republish them for the open document version without the edit debounce so
+    // VS Code can attach editor decorations immediately.
+    scheduleDiagnostics(document, 0);
     scheduleAffectedRoots(document.uri, document.uri);
   });
   documents.onDidChangeContent(({ document }): void => {

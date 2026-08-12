@@ -94,7 +94,7 @@ export function registerFileSystemBridge(
   );
 }
 
-export function registerLoadedIncludeWatching(
+export function registerLoadedIncludeSupport(
   context: vscode.ExtensionContext,
   runtime: ClientRuntime,
 ): void {
@@ -104,6 +104,26 @@ export function registerLoadedIncludeWatching(
     { readonly type: LoadedIncludeResource["type"]; readonly watcher: vscode.FileSystemWatcher }
   >();
   let disposed = false;
+
+  const isLoadedFile = (uri: string): boolean => {
+    for (const resources of roots.values()) {
+      if (resources.get(uri) === "file") return true;
+    }
+    return false;
+  };
+
+  const assignLanguage = (document: vscode.TextDocument): void => {
+    if (disposed || document.languageId === "logrotate" || !isLoadedFile(document.uri.toString())) {
+      return;
+    }
+    void Promise.resolve(vscode.languages.setTextDocumentLanguage(document, "logrotate")).catch(
+      (error: unknown): void => {
+        runtime.output.warn(
+          `Unable to assign the Logrotate language to an included resource: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      },
+    );
+  };
 
   const reportChange = (uri: string): void => {
     void runtime.client
@@ -161,7 +181,8 @@ export function registerLoadedIncludeWatching(
           new Map(
             resources.flatMap(({ uri, type }) => {
               try {
-                return vscode.Uri.parse(uri).scheme === "file" ? [[uri, type] as const] : [];
+                vscode.Uri.parse(uri, true);
+                return [[uri, type] as const];
               } catch {
                 return [];
               }
@@ -170,7 +191,9 @@ export function registerLoadedIncludeWatching(
         );
       }
       reconcile();
+      for (const document of vscode.workspace.textDocuments) assignLanguage(document);
     }),
+    vscode.workspace.onDidOpenTextDocument(assignLanguage),
     {
       dispose(): void {
         if (disposed) return;

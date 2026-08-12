@@ -28,6 +28,17 @@ export async function run(): Promise<void> {
     diagnostics.some(({ code }) => code === "LR1001"),
     `expected included virtual-file diagnostics, received ${JSON.stringify(diagnostics)}`,
   );
+  const includedDocument = await vscode.workspace.openTextDocument(includedUri);
+  await vscode.window.showTextDocument(includedDocument);
+  await waitForLanguage(includedUri, "logrotate");
+  const openedDiagnostic = (await waitForDiagnostics(includedUri)).find(
+    ({ code }) => code === "LR1001",
+  );
+  assert(openedDiagnostic !== undefined, "expected LR1001 after the virtual include opened");
+  assert(
+    openedDiagnostic.range.isEqual(new vscode.Range(1, 4, 1, 10)),
+    `expected the rotote token range, received ${JSON.stringify(openedDiagnostic.range)}`,
+  );
 
   const completion = await vscode.commands.executeCommand<vscode.CompletionList>(
     "vscode.executeCompletionItemProvider",
@@ -52,6 +63,18 @@ async function waitForDiagnostics(uri: vscode.Uri): Promise<readonly vscode.Diag
     await delay(50);
   }
   return vscode.languages.getDiagnostics(uri);
+}
+
+async function waitForLanguage(uri: vscode.Uri, languageId: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const document = vscode.workspace.textDocuments.find(
+      (candidate) => candidate.uri.toString() === uri.toString(),
+    );
+    if (document?.languageId === languageId) return;
+    await delay(50);
+  }
+  throw new Error(`Timed out waiting for ${uri.toString()} to use ${languageId}.`);
 }
 
 async function delay(milliseconds: number): Promise<void> {

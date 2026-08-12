@@ -151,7 +151,7 @@ try {
     );
   }
   bootstrapProcess = launchRemoteCode(
-    vscodeCli,
+    vscodeExecutable,
     userDataDirectory,
     extensionsDirectory,
     "/home/vscode/workspace",
@@ -213,7 +213,7 @@ try {
   requireInstalledExtension(installed, "willibrandon.logrotate-remote-smoke-probe@0.0.0");
 
   smokeProcess = launchRemoteCode(
-    vscodeCli,
+    vscodeExecutable,
     userDataDirectory,
     extensionsDirectory,
     "/home/vscode/workspace",
@@ -315,12 +315,16 @@ async function packageProbe(output) {
   });
 }
 
-function launchRemoteCode(cli, userData, extensions, remotePath) {
+function launchRemoteCode(executable, userData, extensions, remotePath) {
   return spawn(
     "xvfb-run",
     [
       "-a",
-      cli,
+      executable,
+      "--no-sandbox",
+      "--disable-gpu-sandbox",
+      "--no-cached-data",
+      "--disable-workspace-trust",
       "--user-data-dir",
       userData,
       "--extensions-dir",
@@ -332,7 +336,6 @@ function launchRemoteCode(cli, userData, extensions, remotePath) {
       "--disable-updates",
       "--skip-welcome",
       "--skip-release-notes",
-      "--wait",
     ],
     {
       cwd: root,
@@ -404,6 +407,7 @@ async function collectFailureEvidence(error) {
           "%M %s %p\\n",
         ])
       : undefined,
+    localLogs: await collectLocalLogs(),
     localLogFiles: await capture("find", [
       userDataDirectory,
       "-maxdepth",
@@ -419,6 +423,19 @@ async function collectFailureEvidence(error) {
     "utf8",
   ).catch(() => undefined);
   process.stderr.write(`${evidence.remoteServerTree ?? ""}\n`);
+}
+
+async function collectLocalLogs() {
+  const logsDirectory = resolve(userDataDirectory, "logs");
+  const listing = await capture("find", [logsDirectory, "-type", "f", "-print"]);
+  const logs = {};
+  for (const path of listing?.split(/\r?\n/u) ?? []) {
+    if (!path.startsWith(`${logsDirectory}/`)) continue;
+    logs[path.slice(temporaryRoot.length + 1)] = await readFile(path, "utf8").catch((error) =>
+      String(error),
+    );
+  }
+  return logs;
 }
 
 async function findRemoteCodeServer(containerName, commit) {

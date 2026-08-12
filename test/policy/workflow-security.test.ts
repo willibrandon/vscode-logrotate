@@ -85,6 +85,8 @@ describe("workflow supply-chain policy", () => {
     expect(remoteRunner).toContain("findRemoteCodeServer");
     expect(remoteRunner).toContain('"BatchMode=yes"');
     expect(remoteRunner).toContain("300_000");
+    expect(remoteRunner).toMatch(/launchRemoteCode\(\s+vscodeExecutable,/u);
+    expect(remoteRunner).toContain('"--disable-gpu-sandbox"');
     expect(remoteRunner).toContain("/dist/nodeServer.cjs");
     expect(remoteRunner).toContain("[logrotate 3.22.0 on this host]");
     expect(remoteRunner).not.toContain("secrets.");

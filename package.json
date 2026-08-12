@@ -2,7 +2,7 @@
   "name": "logrotate",
   "displayName": "Logrotate",
   "description": "Language support for logrotate configuration and state files",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "license": "MIT",
   "publisher": "willibrandon",

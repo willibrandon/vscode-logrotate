@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-08-12
+## [0.1.2] - 2026-08-12
 
 ### Added
 
@@ -24,12 +24,19 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 
 - Build host validation against the pinned logrotate 3.22.0 release with its version tag available.
+- Release verification excludes checked-out upstream source trees from repository formatting.
+
+## [0.1.1] - 2026-08-12
+
+No artifacts were published. Release verification stopped before publisher access or artifact
+creation.
 
 ## [0.1.0] - 2026-08-12
 
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.2
 [0.1.1]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.1
 [0.1.0]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.0

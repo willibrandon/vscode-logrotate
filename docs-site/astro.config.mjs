@@ -1,6 +1,12 @@
 import { defineConfig } from "astro/config";
 import sitemap from "@astrojs/sitemap";
 import starlight from "@astrojs/starlight";
+import logrotateGrammar from "../syntaxes/logrotate.tmLanguage.json" with { type: "json" };
+
+const logrotateLanguage = {
+  ...logrotateGrammar,
+  name: "logrotate",
+};
 
 export default defineConfig({
   site: "https://willibrandon.github.io",
@@ -13,6 +19,14 @@ export default defineConfig({
       favicon: "/favicon.svg",
       customCss: ["./src/styles/docs.css"],
       credits: false,
+      components: {
+        MarkdownContent: "./src/components/MarkdownContent.astro",
+      },
+      expressiveCode: {
+        shiki: {
+          langs: [logrotateLanguage],
+        },
+      },
       social: [
         {
           icon: "github",

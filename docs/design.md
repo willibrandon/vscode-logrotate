@@ -1147,7 +1147,9 @@ the release artifact
 
 Maintain stable and pre-release channels. Pre-releases are appropriate for new
 parser/formatter behavior; stable upgrades must not silently enable external
-process execution.
+process execution. The VS Code Marketplace requires `major.minor.patch` versions, so odd minor
+versions are pre-releases and even minor versions are stable releases; the same channel flag is
+applied when building and publishing the VSIX.
 
 ## 20. Documentation and maintenance
 

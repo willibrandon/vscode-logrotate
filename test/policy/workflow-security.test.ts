@@ -79,6 +79,10 @@ describe("workflow supply-chain policy", () => {
     expect(release).toContain("subject-path: ${{ env.VSIX_PATH }}");
     expect(release).toContain("sbom-path: ${{ env.SBOM_PATH }}");
     expect(release).toContain('npx vsce publish --packagePath "$VSIX_PATH" --no-dependencies');
+    expect(release).toContain("Number(require('./package.json').version.split('.')[1]) % 2 === 1");
+    expect(release.match(/PRERELEASE_FLAG\+?=\(\)|PRERELEASE_FLAG=\(\)/gu)).toHaveLength(2);
+    expect(release.match(/PRERELEASE_FLAG\+?=\(--pre-release\)/gu)).toHaveLength(1);
+    expect(release).toContain("PRERELEASE_FLAG+=(--prerelease)");
     expect(release).toContain('"$VSIX_PATH" "$CHECKSUM_PATH" "$SBOM_PATH"');
     expect(release).toContain("VSCE_PAT: ${{ secrets.VSCE_PAT }}");
     expect(release).not.toMatch(/OVSX|--oidc/u);

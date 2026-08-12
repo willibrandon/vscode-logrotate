@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { runVSCodeCommand } from "@vscode/test-electron";
+import yauzl from "yauzl";
 
 const root = resolve(import.meta.dirname, "..");
 const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
@@ -17,6 +19,14 @@ const digest = createHash("sha256")
 const expectedChecksum = `${digest}  ${basename(vsix)}\n`;
 if ((await readFile(checksum, "utf8")) !== expectedChecksum) {
   throw new Error(`Checksum does not match ${basename(vsix)}.`);
+}
+const vsixManifest = await readZipText(vsix, "extension.vsixmanifest");
+const minorVersion = Number.parseInt(manifest.version.split(".")[1] ?? "", 10);
+const expectedPreRelease = Number.isSafeInteger(minorVersion) && minorVersion % 2 === 1;
+const packagedAsPreRelease =
+  /<Property Id="Microsoft\.VisualStudio\.Code\.PreRelease" Value="true"\s*\/>/u.test(vsixManifest);
+if (packagedAsPreRelease !== expectedPreRelease) {
+  throw new Error(`${basename(vsix)} channel does not match the odd-minor prerelease policy.`);
 }
 
 const temporaryRoot = await mkdtemp(join(tmpdir(), "vscode-logrotate-vsix-"));
@@ -83,6 +93,40 @@ function run(command, arguments_, environment) {
     child.once("close", (code, signal) => {
       if (signal !== null) rejectPromise(new Error(`${command} stopped with ${signal}.`));
       else resolvePromise(code ?? 1);
+    });
+  });
+}
+
+function readZipText(path, expectedEntry) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    yauzl.open(path, { lazyEntries: true }, (openError, archive) => {
+      if (openError !== null || archive === undefined) {
+        rejectPromise(openError ?? new Error(`Unable to open ${path}.`));
+        return;
+      }
+      let found = false;
+      archive.once("error", rejectPromise);
+      archive.once("end", () => {
+        if (!found) rejectPromise(new Error(`${expectedEntry} is missing from ${path}.`));
+      });
+      archive.on("entry", (entry) => {
+        if (entry.fileName !== expectedEntry) {
+          archive.readEntry();
+          return;
+        }
+        found = true;
+        archive.openReadStream(entry, (streamError, stream) => {
+          if (streamError !== null || stream === undefined) {
+            rejectPromise(streamError ?? new Error(`Unable to read ${expectedEntry}.`));
+            return;
+          }
+          const chunks = [];
+          stream.on("data", (chunk) => chunks.push(chunk));
+          stream.once("error", rejectPromise);
+          stream.once("end", () => resolvePromise(Buffer.concat(chunks).toString("utf8")));
+        });
+      });
+      archive.readEntry();
     });
   });
 }

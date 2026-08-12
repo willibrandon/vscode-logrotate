@@ -14,6 +14,13 @@ updates:
       npm-runtime:
         dependency-type: production
         update-types: [minor, patch]
+    ignore:
+      # Keep compile-time API types aligned with engines.vscode. Raise both
+      # deliberately when the minimum supported VS Code version changes.
+      - dependency-name: "@types/vscode"
+      # Keep Node types aligned with the supported Node 24 toolchain.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 10
   - package-ecosystem: github-actions
     directory: /

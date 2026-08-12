@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { listFiles, PackageManager } from "@vscode/vsce";
 
@@ -32,12 +32,12 @@ let totalBytes = 0;
 for (const path of actual) {
   if (forbiddenPath.test(path)) failures.push(`forbidden package path: ${path}`);
   const absolutePath = resolve(root, path);
-  const metadata = await stat(absolutePath);
-  totalBytes += metadata.size;
-  if (path.startsWith("dist/") && metadata.size > 1024 * 1024) {
-    failures.push(`bundle exceeds 1 MiB: ${path} (${metadata.size} bytes)`);
+  const bytes = await readFile(absolutePath);
+  totalBytes += bytes.byteLength;
+  if (path.startsWith("dist/") && bytes.byteLength > 1024 * 1024) {
+    failures.push(`bundle exceeds 1 MiB: ${path} (${bytes.byteLength} bytes)`);
   }
-  const content = await readFile(absolutePath, "utf8");
+  const content = bytes.toString("utf8");
   if (privatePath.test(content)) failures.push(`private build path found in ${path}`);
   for (const pattern of secretPatterns) {
     if (pattern.test(content)) failures.push(`possible secret ${pattern.source} found in ${path}`);

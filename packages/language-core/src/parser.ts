@@ -726,27 +726,27 @@ function projectHeaderForArguments(header: string): string {
 
   const characters = header.split("");
   let lineStart = 0;
-  for (let index = 0; index <= characters.length; index += 1) {
+  for (let index = 0; index < characters.length; index += 1) {
     const character = characters[index];
-    if (character !== "\r" && character !== "\n" && index !== characters.length) {
+    if (character !== "\r" && character !== "\n") {
       continue;
     }
-    const line = characters.slice(lineStart, index).join("");
-    if (line.trimStart().startsWith("#")) {
-      for (let cursor = lineStart; cursor < index; cursor += 1) {
-        characters[cursor] = " ";
-      }
-    }
-    if (index < characters.length) {
+    blankHeaderComment(characters, lineStart, index);
+    characters[index] = " ";
+    if (character === "\r" && characters[index + 1] === "\n") {
+      index += 1;
       characters[index] = " ";
-      if (character === "\r" && characters[index + 1] === "\n") {
-        index += 1;
-        characters[index] = " ";
-      }
     }
     lineStart = index + 1;
   }
+  blankHeaderComment(characters, lineStart, characters.length);
   return characters.join("");
+}
+
+function blankHeaderComment(characters: string[], start: number, end: number): void {
+  const line = characters.slice(start, end).join("");
+  if (!line.trimStart().startsWith("#")) return;
+  for (let index = start; index < end; index += 1) characters[index] = " ";
 }
 
 function closestDirective(candidate: string): string | undefined {

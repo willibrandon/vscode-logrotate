@@ -17,6 +17,7 @@
     "url": "https://github.com/willibrandon/vscode-logrotate/issues"
   },
   "homepage": "https://github.com/willibrandon/vscode-logrotate#readme",
+  "icon": "media/icon.png",
   "categories": [
     "Programming Languages",
     "Linters",
@@ -309,6 +310,7 @@
     "dist/browserServer.js",
     "syntaxes/",
     "snippets/",
+    "media/icon.png",
     "language-configuration.json",
     "package.nls.json",
     "README.md",

@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows
 - Shared lossless parser, diagnostics, formatter, include analysis, and Node/Web language server.
 - Desktop, remote, virtual-workspace, Restricted Mode, and browser Worker support.
 - Optional trust-gated validation with an installed `logrotate --debug` process.
+- A reviewed Marketplace icon and structured, content-safe language server output logging.
 - Unit, property, grammar, JSON-RPC contract, performance, desktop, web, and package tests.
 
 ## [0.1.0] - Unreleased

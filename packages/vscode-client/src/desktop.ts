@@ -12,6 +12,7 @@ let client: LanguageClient | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel("Logrotate Language Server", { log: true });
+  output.info("Activating Logrotate extension in the desktop extension host.");
   const module = vscode.Uri.joinPath(context.extensionUri, "dist", "nodeServer.cjs").fsPath;
   const serverOptions: ServerOptions = { module, transport: TransportKind.ipc };
   client = new LanguageClient(
@@ -124,7 +125,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.onDidChangeActiveTextEditor(updateExternalValidationContext),
     vscode.workspace.onDidGrantWorkspaceTrust(updateExternalValidationContext),
   );
+  output.info("Starting Logrotate language server.");
   await client.start();
+  output.info("Logrotate language server started.");
   await updateExternalValidationContext();
 }
 

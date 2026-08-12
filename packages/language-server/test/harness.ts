@@ -4,7 +4,12 @@ import {
   StreamMessageReader,
   StreamMessageWriter,
 } from "vscode-languageserver/node";
-import type { Diagnostic, InitializeResult, PublishDiagnosticsParams } from "vscode-languageserver";
+import type {
+  Diagnostic,
+  InitializeResult,
+  LogMessageParams,
+  PublishDiagnosticsParams,
+} from "vscode-languageserver";
 import { createMessageConnection } from "vscode-jsonrpc/node";
 import type { MessageConnection } from "vscode-jsonrpc/node";
 import { startLanguageServer } from "../src/server.js";
@@ -22,6 +27,11 @@ interface DiagnosticWaiter {
   readonly resolve: (params: PublishDiagnosticsParams) => void;
 }
 
+interface LogWaiter {
+  readonly predicate: (message: LogMessageParams) => boolean;
+  readonly resolve: (message: LogMessageParams) => void;
+}
+
 export interface ServerHarness {
   readonly client: MessageConnection;
   readonly initializeResult: InitializeResult;
@@ -33,6 +43,8 @@ export interface ServerHarness {
     uri: string,
     predicate?: (diagnostics: readonly Diagnostic[]) => boolean,
   ): Promise<PublishDiagnosticsParams>;
+  logMessages(): readonly LogMessageParams[];
+  waitForLog(predicate: (message: LogMessageParams) => boolean): Promise<LogMessageParams>;
   dispose(): Promise<void>;
 }
 
@@ -51,6 +63,8 @@ export async function createServerHarness(
   );
   const published = new Map<string, PublishDiagnosticsParams>();
   const waiters: DiagnosticWaiter[] = [];
+  const logMessages: LogMessageParams[] = [];
+  const logWaiters: LogWaiter[] = [];
 
   client.onNotification(
     "textDocument/publishDiagnostics",
@@ -65,6 +79,16 @@ export async function createServerHarness(
       }
     },
   );
+  client.onNotification("window/logMessage", (message: LogMessageParams): void => {
+    logMessages.push(message);
+    for (let index = logWaiters.length - 1; index >= 0; index -= 1) {
+      const waiter = logWaiters[index];
+      if (waiter?.predicate(message) === true) {
+        logWaiters.splice(index, 1);
+        waiter.resolve(message);
+      }
+    }
+  });
   client.onRequest(readFileRequest, ({ uri }): string => {
     const text = files[uri]?.text;
     if (text === undefined) throw new Error(`Missing test file: ${uri}`);
@@ -135,6 +159,23 @@ export async function createServerHarness(
           const index = waiters.indexOf(waiter);
           if (index >= 0) waiters.splice(index, 1);
           rejectPromise(new Error(`Timed out waiting for diagnostics for ${uri}`));
+        }, 2000);
+        timeout.unref();
+      });
+    },
+    logMessages(): readonly LogMessageParams[] {
+      return logMessages;
+    },
+    waitForLog(predicate): Promise<LogMessageParams> {
+      const current = logMessages.find(predicate);
+      if (current !== undefined) return Promise.resolve(current);
+      return new Promise((resolvePromise, rejectPromise): void => {
+        const waiter = { predicate, resolve: resolvePromise };
+        logWaiters.push(waiter);
+        const timeout = setTimeout((): void => {
+          const index = logWaiters.indexOf(waiter);
+          if (index >= 0) logWaiters.splice(index, 1);
+          rejectPromise(new Error("Timed out waiting for language server log output"));
         }, 2000);
         timeout.unref();
       });

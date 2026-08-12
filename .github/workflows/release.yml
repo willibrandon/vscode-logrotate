@@ -80,7 +80,7 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           if [[ -z "$VSCE_PAT" ]]; then
-            echo "The release environment secret VSCE_PAT is required." >&2
+            echo "The VSCE_PAT repository or release-environment secret is required." >&2
             exit 1
           fi
           PRERELEASE_FLAG=()

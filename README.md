@@ -60,14 +60,14 @@ Markdown fences named `logrotate`, `logrotate.conf`, and `logrotate-config` are 
 
 ## Settings
 
-| Setting                             | Default     | Purpose                                                                |
-| ----------------------------------- | ----------- | ---------------------------------------------------------------------- |
-| `logrotate.validation.enable`       | `true`      | Enable built-in syntax and semantic diagnostics.                       |
-| `logrotate.validation.maxProblems`  | `100`       | Limit diagnostics for a malformed document.                            |
-| `logrotate.targetVersion`           | `latest`    | Select `latest`, safe `auto`, or an explicitly supported version.      |
-| `logrotate.externalValidation.mode` | `off`       | Optionally validate with the installed binary on save.                 |
-| `logrotate.executablePath`          | `logrotate` | Installed executable used by trusted desktop validation.               |
-| `logrotate.trace.server`            | `off`       | Enable LSP troubleshooting output without document content by default. |
+| Setting                             | Default     | Purpose                                                           |
+| ----------------------------------- | ----------- | ----------------------------------------------------------------- |
+| `logrotate.validation.enable`       | `true`      | Enable built-in syntax and semantic diagnostics.                  |
+| `logrotate.validation.maxProblems`  | `100`       | Limit diagnostics for a malformed document.                       |
+| `logrotate.targetVersion`           | `latest`    | Select `latest`, safe `auto`, or an explicitly supported version. |
+| `logrotate.externalValidation.mode` | `off`       | Optionally validate with the installed binary on save.            |
+| `logrotate.executablePath`          | `logrotate` | Installed executable used by trusted desktop validation.          |
+| `logrotate.trace.server`            | `off`       | Set LSP protocol trace detail for deep troubleshooting.           |
 
 Internal validation models the reviewed logrotate language. Optional installed validation uses
 `logrotate --debug` and reflects the current host's version, filesystem, accounts, build options,
@@ -81,7 +81,12 @@ and include graph. It is a secondary opinion, not the extension parser or format
 - **Logrotate: Open Directive Documentation**
 
 Installed validation explains why it is unavailable for an unsaved or virtual file, an untrusted
-workspace, or a browser extension host. Normal activation and successful validation stay quiet.
+workspace, or a browser extension host.
+
+The **Logrotate Language Server** output channel records extension and server startup, analyzed
+document URIs and versions, diagnostic and include counts, configuration changes, restarts, closes,
+and failures. Default info logs never include document contents. Explicit protocol tracing can
+include document contents, so enable it only while troubleshooting.
 
 ## Workspace trust and privacy
 

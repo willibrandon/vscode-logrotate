@@ -249,13 +249,11 @@ scheduled drift job against upstream `main`. Negative fixtures must remain
 negative; a test suite made only from valid examples will miss the hardest
 parser behavior.
 
-Logrotate is GPL-2.0-only. The recommended default is to license an official or
-in-tree-governed extension GPL-2.0-only as well. If maintainers want a permissive
-extension license, the language implementation, hover prose, and shipped
-fixtures must be independently authored, upstream GPL content must not be copied
-into the VSIX, and counsel or project governance should approve that boundary.
-Checking out upstream solely as a separate CI input is preferable to vendoring
-its corpus into a differently licensed repository.
+Logrotate is GPL-2.0-only, while this extension is MIT licensed. The language
+implementation, hover prose, and shipped fixtures therefore remain independently
+authored, and upstream GPL content is not copied into the VSIX. Upstream is used
+only as a separately checked-out, pinned CI compatibility oracle; its corpus is
+not vendored into this repository.
 
 ## 5. Comparison review: vscode-caddyfile
 
@@ -391,9 +389,9 @@ This leads to the following 2026 baseline:
   use notifications for ordinary success, activation, or missing optional tools
   ([settings UX](https://code.visualstudio.com/api/ux-guidelines/settings),
   [notification UX](https://code.visualstudio.com/api/ux-guidelines/notifications)).
-- Publish the VSIX with current `@vscode/vsce`. Prefer Marketplace OIDC trusted
-  publishing over a long-lived personal access token where publisher policy
-  allows it ([VSCE OIDC support](https://github.com/microsoft/vscode-vsce),
+- Publish the VSIX with current `@vscode/vsce` using the narrowly scoped
+  `VSCE_PAT` GitHub Actions secret for the `willibrandon` publisher
+  ([VSCE repository](https://github.com/microsoft/vscode-vsce),
   [publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)).
 
 The target engine should be `^1.100.0` unless implementation proves a later API
@@ -411,8 +409,8 @@ Use **Logrotate**. It is short, searchable, unsurprising, and matches how users
 will search the Marketplace and command palette. Avoid a clever brand that hides
 the language being supported.
 
-Before creating the publisher or repository, re-check Marketplace, Open VSX,
-npm, and Git hosting for name and identifier availability. Suggested values:
+The repository is public and the Visual Studio Marketplace publisher is
+`willibrandon`. The selected values are:
 
 | Field | Value |
 | --- | --- |
@@ -425,10 +423,9 @@ npm, and Git hosting for name and identifier availability. Suggested values:
 | State scope | `source.logrotate.state` |
 | Configuration prefix | `logrotate` |
 
-Use a verified organization publisher if this is an official logrotate project.
-The icon must remain legible at small size and in light/dark Marketplace
-surfaces; ship a PNG of at least 128×128 as required by manifest guidance
-([extension manifest](https://code.visualstudio.com/api/references/extension-manifest)).
+Ship the reviewed `media/icon.png`: a high-contrast log document and rotation
+arrow that remains legible at small size and on light and dark Marketplace
+surfaces.
 
 ### 8.2 Manifest outline
 
@@ -946,7 +943,7 @@ Keep public configuration small and stable:
 | `logrotate.targetVersion` | `latest` | resource | Version-aware syntax and hover |
 | `logrotate.externalValidation.mode` | `off` | resource | `off` or explicitly `onSave` |
 | `logrotate.executablePath` | `logrotate` | machine-overridable | Trusted desktop tool path |
-| `logrotate.trace.server` | `off` | window | Troubleshooting only; never document content by default |
+| `logrotate.trace.server` | `off` | window | Explicit LSP protocol trace detail for troubleshooting |
 
 Mark the executable and external-validation settings as restricted. Validate
 types and ranges in the manifest and explain limitations in setting descriptions.
@@ -960,8 +957,12 @@ Commands:
 - `Logrotate: Open Directive Documentation`
 
 The external validation command should explain why it is unavailable when the
-document is unsaved, virtual, untrusted, or running in a browser. Ordinary
-startup and successful validation remain silent.
+document is unsaved, virtual, untrusted, or running in a browser. The default
+Info output should record client/server startup, initialization, analyzed URI
+and version, diagnostic and include counts, configuration changes, restart,
+close, and failures. It must sanitize control characters, cap fields, and never
+write document contents. Explicit protocol tracing can contain document
+contents and must be described as a temporary troubleshooting mode.
 
 ## 16. Security, privacy, and trust
 
@@ -983,7 +984,8 @@ Mitigations:
   `when` clause;
 - no automatic download of logrotate or other binaries;
 - no following includes merely to provide colorization;
-- redact document text from default logs and cap paths/output in trace logs;
+- omit document text from default logs, cap logged fields, neutralize control
+  characters, and disclose that explicit protocol traces can contain content;
 - dispose clients, output channels, watchers, and processes on deactivation;
 - pin CI actions by full commit SHA and grant minimum job permissions.
 
@@ -1134,12 +1136,10 @@ Renovate updates actions and npm dependencies through reviewed pull requests.
 2. Re-run required CI and build a single VSIX in a protected environment.
 3. Generate checksum, SPDX or CycloneDX SBOM, provenance/attestation, and release
    notes.
-4. Publish the same bytes to the VS Code Marketplace using `vsce publish --oidc`
-   where available.
-5. Publish the same VSIX to Open VSX using the narrowest supported scoped token
-   until equivalent trusted publishing is available.
-6. Attach the VSIX, checksum, SBOM, and provenance to the GitHub release.
-7. Verify Marketplace installation before announcing the release.
+4. Publish the same bytes to the VS Code Marketplace using the `VSCE_PAT`
+   repository or protected-environment secret.
+5. Attach the VSIX, checksum, SBOM, and provenance to the GitHub release.
+6. Verify Marketplace installation before announcing the release.
 
 GitHub artifact attestations can establish build provenance and should accompany
 the release artifact
@@ -1172,8 +1172,8 @@ versions, while the optional installed-binary check reflects one host.
 
 ### Phase 0: specification and project bootstrap
 
-- Confirm official ownership, publisher, Marketplace/Open VSX availability, and
-  GPL licensing decision.
+- Confirm public repository ownership, the `willibrandon` Marketplace publisher,
+  and the independently authored MIT licensing boundary.
 - Scaffold npm workspaces, strict TypeScript, bundle entries, CI, and package
   allowlist.
 - Pin an upstream logrotate compatibility revision.
@@ -1246,7 +1246,7 @@ The extension is ready for 1.0 only when all of the following are true:
   telemetry, runtime network call, sidebar, or routine notification.
 - CI tests the declared VS Code floor, stable, web, all three desktop operating
   systems, grammar scopes, package contents, and dependency/security policy.
-- The released Marketplace/Open VSX artifact is the same tested, checksummed,
+- The Marketplace and GitHub release artifact is the same tested, checksummed,
   attested VSIX.
 
 ## 23. Risks and explicit decisions
@@ -1261,7 +1261,7 @@ The extension is ready for 1.0 only when all of the following are true:
 | Browser and desktop behavior drift | Shared core/server handlers and transport parity tests |
 | Static directive list rots | Single registry, generated consumers, source drift automation |
 | Broad file recognition conflicts with other extensions | Exact/narrow associations and user-owned `files.associations`; no forced reassignment |
-| Licensing contaminates a permissive VSIX | Default GPL-2.0-only or independently authored boundary approved before implementation |
+| Licensing contaminates the MIT VSIX | Independently authored implementation and docs; upstream remains a checkout-only CI oracle |
 | Tooling snapshot becomes stale | Lockfile, scheduled dependency PRs, release-time current-major review, engine-floor testing |
 
 ## 24. Final recommendation
@@ -1293,7 +1293,7 @@ upstream C parser and fixture corpus as the compatibility authority.
 - [Testing extensions](https://code.visualstudio.com/api/working-with-extensions/testing-extension)
 - [Publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)
 - [Official VS Code extension samples](https://github.com/microsoft/vscode-extension-samples)
-- [VSCE repository and OIDC documentation](https://github.com/microsoft/vscode-vsce)
+- [VSCE repository](https://github.com/microsoft/vscode-vsce)
 - [Node.js release schedule](https://nodejs.org/en/about/previous-releases)
 - [Secure use of GitHub Actions](https://docs.github.com/en/actions/reference/security/secure-use)
 - [GitHub artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations)

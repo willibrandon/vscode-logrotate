@@ -6,6 +6,7 @@ const root = resolve(import.meta.dirname, "../..");
 
 interface ExtensionManifest {
   readonly activationEvents?: unknown;
+  readonly icon: string;
   readonly contributes: {
     readonly languages: readonly {
       readonly id: string;
@@ -26,6 +27,15 @@ const manifest = JSON.parse(
 ) as unknown as ExtensionManifest;
 
 describe("extension manifest", () => {
+  it("ships the reviewed square PNG icon", async () => {
+    expect(manifest.icon).toBe("media/icon.png");
+    const icon = await readFile(resolve(root, manifest.icon));
+    expect(icon.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+    expect(icon.readUInt32BE(16)).toBe(256);
+    expect(icon.readUInt32BE(20)).toBe(256);
+    expect(icon.byteLength).toBeLessThan(100_000);
+  });
+
   it("declares narrow configuration and state associations without eager activation", () => {
     expect(manifest.activationEvents).toBeUndefined();
     expect(manifest.contributes.languages).toEqual([

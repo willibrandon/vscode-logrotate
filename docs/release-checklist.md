@@ -6,14 +6,15 @@ No release is authorized until every item has evidence. The package identity is
 ## External ownership blockers
 
 - [x] Confirm Brandon Williams as the maintainer and `willibrandon` as the publisher ID.
-- [ ] Verify the GitHub organization and protected `main`/`v*` tag rules.
-- [ ] Verify the `willibrandon` Marketplace publisher and scoped `VSCE_PAT` release secret.
-- [ ] Publish private security and conduct contacts.
-- [ ] Confirm the MIT license and independently authored boundary remain intact.
+- [x] Verify the public GitHub repository and protected `main`/`v*` tag rules.
+- [x] Verify the `willibrandon` Marketplace publisher and configured `VSCE_PAT` release secret.
+- [x] Enable GitHub private vulnerability reporting and publish the .NET conduct policy.
+- [x] Confirm the MIT license and independently authored boundary remain intact.
 
 ## Candidate evidence
 
-- [ ] Tag is exactly `v<package.json version>`, signed/protected, and points to a clean commit.
+- [ ] Tag is exactly `v<package.json version>`, protected and immutable, and points to a clean
+      commit.
 - [ ] `CHANGELOG.md` contains that version and release date.
 - [ ] Required CI, CodeQL, dependency review, pinned-upstream conformance, desktop matrix, and web
       jobs passed for the commit.

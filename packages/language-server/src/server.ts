@@ -42,6 +42,7 @@ import type {
   DocumentSymbol,
   FoldingRange,
   Hover,
+  InitializeParams,
   InitializeResult,
   Location,
   Position,
@@ -103,7 +104,11 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
         settings,
         fileSystem,
         loadedIncludes,
-      ).catch((): void => undefined);
+      ).catch((error: unknown): void => {
+        connection.console.error(
+          `[textDocument/publishDiagnostics] Analysis failed for ${formatResourceForLog(document.uri)}: ${safeLogText(errorMessage(error))}`,
+        );
+      });
       diagnosticJobs.add(job);
       void job.finally((): void => {
         diagnosticJobs.delete(job);
@@ -112,29 +117,39 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     pendingDiagnostics.set(document.uri, handle);
   };
 
-  connection.onInitialize((): InitializeResult => ({
-    capabilities: {
-      textDocumentSync: TextDocumentSyncKind.Incremental,
-      completionProvider: { triggerCharacters: [" ", "=", "/"] },
-      hoverProvider: true,
-      signatureHelpProvider: { triggerCharacters: [" "] },
-      documentSymbolProvider: true,
-      workspaceSymbolProvider: true,
-      foldingRangeProvider: true,
-      selectionRangeProvider: true,
-      documentLinkProvider: { resolveProvider: false },
-      definitionProvider: true,
-      referencesProvider: true,
-      documentHighlightProvider: true,
-      documentFormattingProvider: true,
-      documentRangeFormattingProvider: true,
-      semanticTokensProvider: {
-        legend: { tokenTypes: [...tokenTypes], tokenModifiers: [...tokenModifiers] },
-        full: true,
+  connection.onInitialize((params: InitializeParams): InitializeResult => {
+    const client = params.clientInfo?.name ?? "unknown client";
+    connection.console.info(
+      `[initialize] Initializing Logrotate language server for ${safeLogText(client)}.`,
+    );
+    return {
+      capabilities: {
+        textDocumentSync: TextDocumentSyncKind.Incremental,
+        completionProvider: { triggerCharacters: [" ", "=", "/"] },
+        hoverProvider: true,
+        signatureHelpProvider: { triggerCharacters: [" "] },
+        documentSymbolProvider: true,
+        workspaceSymbolProvider: true,
+        foldingRangeProvider: true,
+        selectionRangeProvider: true,
+        documentLinkProvider: { resolveProvider: false },
+        definitionProvider: true,
+        referencesProvider: true,
+        documentHighlightProvider: true,
+        documentFormattingProvider: true,
+        documentRangeFormattingProvider: true,
+        semanticTokensProvider: {
+          legend: { tokenTypes: [...tokenTypes], tokenModifiers: [...tokenModifiers] },
+          full: true,
+        },
+        codeActionProvider: { codeActionKinds: [CodeActionKind.QuickFix] },
       },
-      codeActionProvider: { codeActionKinds: [CodeActionKind.QuickFix] },
-    },
-  }));
+    };
+  });
+
+  connection.onInitialized((): void => {
+    connection.console.info("[initialized] Logrotate language server initialized.");
+  });
 
   connection.onDidChangeConfiguration((event): void => {
     const candidate = (event.settings as { readonly logrotate?: Partial<ServerSettings> })
@@ -146,20 +161,35 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
       },
       targetVersion: candidate?.targetVersion ?? defaultSettings.targetVersion,
     };
+    connection.console.info(
+      `[workspace/didChangeConfiguration] Configuration updated: validation=${settings.validation.enable ? "enabled" : "disabled"}, maxProblems=${settings.validation.maxProblems}, targetVersion=${safeLogText(settings.targetVersion)}.`,
+    );
     for (const document of documents.all()) {
       scheduleDiagnostics(document);
     }
   });
 
-  documents.onDidOpen(({ document }): void => scheduleDiagnostics(document));
+  documents.onDidOpen(({ document }): void => {
+    connection.console.info(
+      `[textDocument/didOpen] Opened ${formatResourceForLog(document.uri)} (${safeLogText(document.languageId)}, version ${document.version}).`,
+    );
+    scheduleDiagnostics(document);
+  });
   documents.onDidChangeContent(({ document }): void => scheduleDiagnostics(document));
   documents.onDidClose(({ document }): void => {
     cancelPending(document.uri);
+    connection.console.info(
+      `[textDocument/didClose] Closed ${formatResourceForLog(document.uri)}.`,
+    );
     const job = (async (): Promise<void> => {
       await connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
       await clearRemovedIncludes(connection, document.uri, new Set(), loadedIncludes);
       loadedIncludes.delete(document.uri);
-    })().catch((): void => undefined);
+    })().catch((error: unknown): void => {
+      connection.console.error(
+        `[textDocument/didClose] Cleanup failed for ${formatResourceForLog(document.uri)}: ${safeLogText(errorMessage(error))}`,
+      );
+    });
     diagnosticJobs.add(job);
     void job.finally((): void => {
       diagnosticJobs.delete(job);
@@ -167,6 +197,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
   });
 
   connection.onShutdown(async (): Promise<void> => {
+    connection.console.info("[shutdown] Stopping Logrotate language server.");
     for (const pending of pendingDiagnostics.values()) timers.clearTimeout(pending);
     pendingDiagnostics.clear();
     await Promise.allSettled(diagnosticJobs);
@@ -672,6 +703,9 @@ async function publishDiagnostics(
   if (!settings.validation.enable) {
     await connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
     await clearRemovedIncludes(connection, document.uri, new Set(), loadedIncludes);
+    connection.console.info(
+      `[textDocument/publishDiagnostics] Validation disabled; cleared diagnostics for ${formatResourceForLog(document.uri)}.`,
+    );
     return;
   }
   if (document.languageId === "logrotate-state") {
@@ -683,6 +717,7 @@ async function publishDiagnostics(
       version: document.version,
       diagnostics: core.map((item): Diagnostic => toDiagnostic(document, item)),
     });
+    logAnalysis(connection, document, core.length, 1);
     return;
   }
 
@@ -697,6 +732,7 @@ async function publishDiagnostics(
   if (graph.cancelled || documents.get(document.uri)?.version !== version) return;
 
   const currentIncludes = new Set<string>();
+  let diagnosticCount = 0;
   for (const [uri, included] of graph.files) {
     if (uri !== document.uri) currentIncludes.add(uri);
     const open = documents.get(uri);
@@ -710,6 +746,7 @@ async function publishDiagnostics(
       ...analyze(parsed),
       ...graph.diagnostics.filter(({ resource }) => resource === uri),
     ].slice(0, settings.validation.maxProblems);
+    diagnosticCount += core.length;
     await connection.sendDiagnostics({
       uri,
       ...(open === undefined ? {} : { version: open.version }),
@@ -718,6 +755,60 @@ async function publishDiagnostics(
   }
   await clearRemovedIncludes(connection, document.uri, currentIncludes, loadedIncludes);
   loadedIncludes.set(document.uri, currentIncludes);
+  logAnalysis(connection, document, diagnosticCount, graph.files.size);
+}
+
+function logAnalysis(
+  connection: Connection,
+  document: TextDocument,
+  diagnosticCount: number,
+  resourceCount: number,
+): void {
+  connection.console.info(
+    `[textDocument/publishDiagnostics] Analyzed ${formatResourceForLog(document.uri)} (version ${document.version}): ${diagnosticCount} diagnostic(s) across ${resourceCount} resource(s).`,
+  );
+}
+
+function formatResourceForLog(value: string): string {
+  try {
+    const uri = URI.parse(value);
+    if (uri.scheme === "git" && uri.query.length <= 4096) {
+      try {
+        const metadata = JSON.parse(uri.query) as unknown;
+        if (
+          typeof metadata === "object" &&
+          metadata !== null &&
+          "path" in metadata &&
+          typeof metadata.path === "string"
+        ) {
+          const ref =
+            "ref" in metadata && typeof metadata.ref === "string" && metadata.ref !== ""
+              ? ` (ref ${metadata.ref})`
+              : "";
+          return safeLogText(`git:${metadata.path}${ref}`);
+        }
+      } catch {
+        // Fall back to the sanitized URI path when the provider metadata is malformed.
+      }
+    }
+    return safeLogText(uri.with({ query: null, fragment: null }).toString(true));
+  } catch {
+    return safeLogText(value.split(/[?#]/u, 1)[0] ?? value);
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function safeLogText(value: string, maximumLength = 500): string {
+  let sanitized = "";
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    sanitized += (code >= 0 && code <= 31) || code === 127 ? "�" : character;
+    if (sanitized.length >= maximumLength) return `${sanitized.slice(0, maximumLength)}…`;
+  }
+  return sanitized;
 }
 
 async function clearRemovedIncludes(

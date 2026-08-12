@@ -26,8 +26,10 @@ export function registerCommonCommands(
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("logrotate.restartLanguageServer", async (): Promise<void> => {
+      runtime.output.info("Restarting Logrotate language server.");
       await runtime.client.stop();
       await runtime.client.start();
+      runtime.output.info("Logrotate language server restarted.");
     }),
     vscode.commands.registerCommand("logrotate.showLanguageServerOutput", (): void => {
       runtime.output.show(true);

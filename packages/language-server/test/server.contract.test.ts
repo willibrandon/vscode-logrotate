@@ -48,6 +48,70 @@ describe("shared language server contract", () => {
     );
   });
 
+  it("logs initialization, document analysis, configuration, and close without document contents", async () => {
+    harness = await createServerHarness();
+    await harness.waitForLog(({ message }) => message.includes("language server initialized"));
+
+    const privateDocumentText = "/var/log/private {\n  never-log-this-content\n}\n";
+    await harness.open(uri, "logrotate", privateDocumentText);
+    await harness.waitForDiagnostics(uri, (items) => items.length > 0);
+    await harness.waitForLog(
+      ({ message }) => message.includes("Analyzed") && message.includes(uri),
+    );
+    await harness.configure({
+      logrotate: {
+        validation: { enable: true, maxProblems: 25 },
+        targetVersion: "latest\n[error] forged",
+      },
+    });
+    const configurationLog = await harness.waitForLog(({ message }) =>
+      message.includes("maxProblems=25"),
+    );
+    expect(configurationLog.message).not.toContain("\n");
+    expect(configurationLog.message).toContain("targetVersion=latest�[error] forged");
+    await harness.close(uri);
+    await harness.waitForLog(({ message }) => message.includes("Closed") && message.includes(uri));
+
+    const messages = harness.logMessages().map(({ message }) => message);
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("[initialize] Initializing Logrotate language server"),
+        expect.stringContaining("[initialized] Logrotate language server initialized"),
+        expect.stringContaining(`[textDocument/didOpen] Opened ${uri}`),
+        expect.stringMatching(
+          /\[textDocument\/publishDiagnostics\] Analyzed .*: \d+ diagnostic\(s\) across 1 resource\(s\)\./u,
+        ),
+        expect.stringContaining("[workspace/didChangeConfiguration] Configuration updated"),
+        expect.stringContaining(`[textDocument/didClose] Closed ${uri}`),
+      ]),
+    );
+    expect(messages.join("\n")).not.toContain("never-log-this-content");
+  });
+
+  it("formats virtual Git resources without encoded provider metadata", async () => {
+    harness = await createServerHarness();
+    const gitUri =
+      "git:/home/brandon/src/dotsider/deploy/caddy-metrics-logrotate.git?%7B%22path%22%3A%22%2Fhome%2Fbrandon%2Fsrc%2Fdotsider%2Fdeploy%2Fcaddy-metrics-logrotate%22%2C%22ref%22%3A%22%22%7D";
+    await harness.open(gitUri, "logrotate", "/var/log/caddy-metrics.log {\n  daily\n}\n");
+
+    const opened = await harness.waitForLog(({ message }) =>
+      message.includes("[textDocument/didOpen]"),
+    );
+    expect(opened.message).toContain(
+      "Opened git:/home/brandon/src/dotsider/deploy/caddy-metrics-logrotate (logrotate, version 1).",
+    );
+    expect(opened.message).not.toMatch(/%22|%2F|%3A|%7B|\.git\?/u);
+
+    await harness.waitForDiagnostics(gitUri);
+    const analyzed = await harness.waitForLog(
+      ({ message }) => message.includes("Analyzed") && message.includes("git:"),
+    );
+    expect(analyzed.message).toContain(
+      "Analyzed git:/home/brandon/src/dotsider/deploy/caddy-metrics-logrotate (version 1)",
+    );
+    expect(analyzed.message).not.toContain("?");
+  });
+
   it("debounces changes, publishes only the current version, caps findings, and clears on close", async () => {
     harness = await createServerHarness();
     await harness.open(uri, "logrotate", "UNKNOWN\n".repeat(120));

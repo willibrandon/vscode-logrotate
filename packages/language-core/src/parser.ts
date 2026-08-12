@@ -623,6 +623,13 @@ function validateArguments(
 }
 
 function projectHeaderForArguments(header: string): string {
+  if (!header.includes("\n") && !header.includes("\r")) {
+    return header;
+  }
+  if (!header.includes("#")) {
+    return header.replace(/[\r\n]/gu, " ");
+  }
+
   const characters = header.split("");
   let lineStart = 0;
   for (let index = 0; index <= characters.length; index += 1) {

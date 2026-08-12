@@ -23,6 +23,37 @@ export function decodeArguments(
     }
 
     const argumentStart = cursor;
+
+    // Most logrotate arguments are unquoted paths or scalar values. Avoid
+    // building those strings one character at a time while preserving the
+    // slower quoted/escaped path for arguments that need decoding.
+    let simpleEnd = cursor;
+    while (simpleEnd < end) {
+      const character = source[simpleEnd];
+      if (
+        isHorizontalWhitespace(character) ||
+        character === "\\" ||
+        character === "'" ||
+        character === '"'
+      ) {
+        break;
+      }
+      simpleEnd += 1;
+    }
+    if (simpleEnd > cursor && (simpleEnd === end || isHorizontalWhitespace(source[simpleEnd]))) {
+      const raw = source.slice(cursor, simpleEnd);
+      decoded.push({
+        start: cursor,
+        end: simpleEnd,
+        raw,
+        value: raw,
+        quoted: false,
+        complete: true,
+      });
+      cursor = simpleEnd;
+      continue;
+    }
+
     let value = "";
     let quote: "'" | '"' | undefined;
     let quoted = false;

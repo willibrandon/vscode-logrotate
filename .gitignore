@@ -4,6 +4,7 @@ coverage/
 .vscode-test/
 .vscode-test-web/
 .upstream/
+.logrotate-3.22/
 .eslintcache
 *.tsbuildinfo
 packages/*/lib/

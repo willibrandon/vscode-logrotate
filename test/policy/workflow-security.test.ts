@@ -113,6 +113,18 @@ describe("workflow supply-chain policy", () => {
     expect(release).toContain("LOGROTATE_SOURCE: ${{ github.workspace }}/.upstream");
   });
 
+  it("excludes checked-out release inputs from repository formatting", async () => {
+    const [gitIgnore, prettierIgnore] = await Promise.all([
+      readFile(resolve(root, ".gitignore"), "utf8"),
+      readFile(resolve(root, ".prettierignore"), "utf8"),
+    ]);
+
+    expect(gitIgnore.split("\n")).toContain(".upstream/");
+    expect(gitIgnore.split("\n")).toContain(".logrotate-3.22/");
+    expect(prettierIgnore.split("\n")).toContain(".upstream");
+    expect(prettierIgnore.split("\n")).toContain(".logrotate-3.22");
+  });
+
   it("publishes one checked and attested VSIX through narrowly scoped credentials", async () => {
     const release = workflow("release.yml");
     const installedValidation = await readFile(

@@ -1,6 +1,7 @@
 dist
 node_modules
 .upstream
+.logrotate-3.22
 package-lock.json
 syntaxes/*.json
 snippets/*.json

@@ -117,7 +117,7 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.lineAt(2).text, "  # ");
     assert.equal(document.lineAt(4).text, "    echo rotated");
 
-    await vscode.commands.executeCommand("editor.action.commentLine");
+    await executeAndWaitForDocumentChange("editor.action.commentLine", document);
     assert.equal(document.getText(), source);
   });
 });
@@ -132,14 +132,39 @@ async function toggleCommentsAfterEmbeddedLanguagesLoad(
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     editor.selections = [...selections];
-    await vscode.commands.executeCommand("editor.action.commentLine");
+    await executeAndWaitForDocumentChange("editor.action.commentLine", document);
     if (document.lineAt(embeddedLine).text === "    echo rotated") return;
 
-    await vscode.commands.executeCommand("undo");
+    await executeAndWaitForDocumentChange("undo", document);
     assert.equal(document.getText(), source);
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   assert.fail("embedded shell language did not become available to the comment command");
+}
+
+async function executeAndWaitForDocumentChange(
+  command: string,
+  document: vscode.TextDocument,
+): Promise<void> {
+  const startingVersion = document.version;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let subscription: vscode.Disposable | undefined;
+  const changed = new Promise<void>((resolve, reject) => {
+    subscription = vscode.workspace.onDidChangeTextDocument(({ document: changedDocument }) => {
+      if (changedDocument.uri.toString() === document.uri.toString()) resolve();
+    });
+    timeout = setTimeout(() => {
+      reject(new Error(`Timed out waiting for ${command} to edit ${document.uri.toString()}`));
+    }, 5_000);
+  });
+
+  try {
+    await vscode.commands.executeCommand(command);
+    if (document.version === startingVersion) await changed;
+  } finally {
+    subscription?.dispose();
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
 }
 
 async function waitForDiagnostics(uri: vscode.Uri): Promise<readonly vscode.Diagnostic[]> {

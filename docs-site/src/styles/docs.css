@@ -2,7 +2,7 @@
   --sl-color-accent-low: #102f50;
   --sl-color-accent: #70baff;
   --sl-color-accent-high: #d8edff;
-  --sl-content-width: 48rem;
+  --sl-content-width: 60rem;
 }
 
 :root[data-theme="light"] {
@@ -12,7 +12,7 @@
 }
 
 .sl-markdown-content p {
-  max-width: 72ch;
+  max-width: 84ch;
 }
 
 .sl-markdown-content img {

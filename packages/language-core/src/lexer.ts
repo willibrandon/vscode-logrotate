@@ -24,17 +24,15 @@ export function lexLines(
     if (cancelled?.() === true) {
       break;
     }
-    const content = source.slice(line.start, line.contentEnd);
-    if (inScript && !/^\s*endscript\s*$/u.test(content)) {
+    if (inScript && !isScriptTerminator(source, line)) {
       if (line.contentEnd > line.start) {
         tokens.push(token("raw-shell", source, line.start, line.contentEnd));
       }
     } else {
       lexLine(source, line, tokens);
-      const directive = /^\s*([a-z]+)(?:\s|=|$)/u.exec(content)?.[1];
       if (inScript) {
         inScript = false;
-      } else if (directive !== undefined && scriptStarters.has(directive)) {
+      } else if (isScriptStarter(source, line)) {
         inScript = true;
       }
     }
@@ -43,6 +41,34 @@ export function lexLines(
     }
   }
   return tokens;
+}
+
+function isScriptTerminator(source: string, line: LineInfo): boolean {
+  let cursor = line.start;
+  while (cursor < line.contentEnd && isHorizontalWhitespace(source[cursor])) cursor += 1;
+  if (!source.startsWith("endscript", cursor)) return false;
+  cursor += "endscript".length;
+  while (cursor < line.contentEnd && isHorizontalWhitespace(source[cursor])) cursor += 1;
+  return cursor === line.contentEnd;
+}
+
+function isScriptStarter(source: string, line: LineInfo): boolean {
+  let cursor = line.start;
+  while (cursor < line.contentEnd && isHorizontalWhitespace(source[cursor])) cursor += 1;
+  const start = cursor;
+  while (cursor < line.contentEnd) {
+    const code = source.charCodeAt(cursor);
+    if (code < 97 || code > 122) break;
+    cursor += 1;
+  }
+  if (cursor === start) return false;
+  const separator = source[cursor];
+  if (cursor < line.contentEnd && !isHorizontalWhitespace(separator) && separator !== "=") {
+    return false;
+  }
+  const length = cursor - start;
+  if (length < 9 || length > 11) return false;
+  return scriptStarters.has(source.slice(start, cursor));
 }
 
 function lexLine(source: string, line: LineInfo, tokens: Token[]): void {

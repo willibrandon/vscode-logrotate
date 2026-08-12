@@ -54,6 +54,34 @@ export function decodeArguments(
       continue;
     }
 
+    const openingQuote = source[cursor];
+    if (openingQuote === "'" || openingQuote === '"') {
+      let closingQuote = cursor + 1;
+      while (
+        closingQuote < end &&
+        source[closingQuote] !== openingQuote &&
+        source[closingQuote] !== "\\"
+      ) {
+        closingQuote += 1;
+      }
+      const afterQuote = closingQuote + 1;
+      if (
+        source[closingQuote] === openingQuote &&
+        (afterQuote === end || isHorizontalWhitespace(source[afterQuote]))
+      ) {
+        decoded.push({
+          start: cursor,
+          end: afterQuote,
+          raw: source.slice(cursor, afterQuote),
+          value: source.slice(cursor + 1, closingQuote),
+          quoted: true,
+          complete: true,
+        });
+        cursor = afterQuote;
+        continue;
+      }
+    }
+
     let value = "";
     let quote: "'" | '"' | undefined;
     let quoted = false;

@@ -69,7 +69,14 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
       break;
     }
     const content = context.source.slice(line.start, line.contentEnd);
-    const trimmed = content.trim();
+    let trimmedStart = 0;
+    while (trimmedStart < content.length && isHorizontalWhitespace(content[trimmedStart])) {
+      trimmedStart += 1;
+    }
+    let trimmedEnd = content.length;
+    while (trimmedEnd > trimmedStart && isHorizontalWhitespace(content[trimmedEnd - 1])) {
+      trimmedEnd -= 1;
+    }
     const invalidControl = findInvalidControl(content);
     if (invalidControl >= 0) {
       addDiagnostic(context, {
@@ -84,10 +91,10 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
       context.index += 1;
       continue;
     }
-    if (scope === "block" && trimmed.startsWith("}")) {
+    if (scope === "block" && content[trimmedStart] === "}") {
       break;
     }
-    if (trimmed === "") {
+    if (trimmedStart === trimmedEnd) {
       nodes.push({
         kind: "blank",
         start: line.start,
@@ -97,13 +104,13 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
       context.index += 1;
       continue;
     }
-    if (trimmed.startsWith("#")) {
+    if (content[trimmedStart] === "#") {
       nodes.push({
         kind: "comment",
         start: line.start,
         end: line.end,
         raw: context.source.slice(line.start, line.end),
-        text: trimmed.slice(1),
+        text: content.slice(trimmedStart + 1, trimmedEnd),
       });
       context.index += 1;
       continue;
@@ -134,14 +141,14 @@ function parseNodes(context: ParseContext, scope: DirectiveScope): DocumentNode[
       context.index += 1;
       continue;
     }
-    if (trimmed === "}") {
+    if (trimmedEnd === trimmedStart + 1 && content[trimmedStart] === "}") {
       addDiagnostic(context, {
         code: "LR1005",
         severity: "error",
         message: "This closing brace has no matching rotation block.",
         source: "logrotate",
-        start: line.start + content.indexOf("}"),
-        end: line.start + content.indexOf("}") + 1,
+        start: line.start + trimmedStart,
+        end: line.start + trimmedStart + 1,
       });
       nodes.push(errorNode(context.source, line.start, line.end, "Unexpected closing brace."));
       context.index += 1;
@@ -176,19 +183,18 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
     headerEnd = line.end;
     if (brace >= 0) {
       openBrace = { start: line.start + brace, end: line.start + brace + 1 };
-      const trailing = content.slice(brace + 1);
-      const inlineCloseOffset = trailing.indexOf("}");
+      const inlineCloseOffset = content.indexOf("}", brace + 1);
       if (
         inlineCloseOffset >= 0 &&
-        trailing.slice(0, inlineCloseOffset).trim() === "" &&
-        trailing.slice(inlineCloseOffset + 1).trim() === ""
+        onlyHorizontalWhitespaceBetween(content, brace + 1, inlineCloseOffset) &&
+        onlyHorizontalWhitespaceAfter(content, inlineCloseOffset + 1)
       ) {
         inlineCloseBrace = {
-          start: line.start + brace + 1 + inlineCloseOffset,
-          end: line.start + brace + 2 + inlineCloseOffset,
+          start: line.start + inlineCloseOffset,
+          end: line.start + inlineCloseOffset + 1,
         };
-      } else if (trailing.trim() !== "") {
-        const trailingStart = line.start + brace + 1 + trailing.search(/\S/u);
+      } else if (!onlyHorizontalWhitespaceAfter(content, brace + 1)) {
+        const trailingStart = line.start + firstNonHorizontalWhitespace(content, brace + 1);
         addDiagnostic(context, {
           code: "LR1012",
           severity: "error",
@@ -270,9 +276,9 @@ function parseRotationBlock(context: ParseContext): RotationBlockNode | ErrorNod
         end: closingLine.start + closingOffset + 1,
       };
       end = closingLine.end;
-      const trailing = closingContent.slice(closingOffset + 1);
-      if (trailing.trim() !== "") {
-        const trailingStart = closingLine.start + closingOffset + 1 + trailing.search(/\S/u);
+      if (!onlyHorizontalWhitespaceAfter(closingContent, closingOffset + 1)) {
+        const trailingStart =
+          closingLine.start + firstNonHorizontalWhitespace(closingContent, closingOffset + 1);
         addDiagnostic(context, {
           code: "LR1013",
           severity: "error",
@@ -431,10 +437,19 @@ function isDirectiveLine(content: string): boolean {
 }
 
 function onlyHorizontalWhitespaceAfter(content: string, start: number): boolean {
-  for (let index = start; index < content.length; index += 1) {
+  return onlyHorizontalWhitespaceBetween(content, start, content.length);
+}
+
+function onlyHorizontalWhitespaceBetween(content: string, start: number, end: number): boolean {
+  for (let index = start; index < end; index += 1) {
     if (!isHorizontalWhitespace(content[index])) return false;
   }
   return true;
+}
+
+function firstNonHorizontalWhitespace(content: string, start: number): number {
+  while (start < content.length && isHorizontalWhitespace(content[start])) start += 1;
+  return start;
 }
 
 function isAsciiLetter(code: number): boolean {

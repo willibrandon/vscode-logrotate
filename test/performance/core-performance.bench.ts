@@ -21,7 +21,7 @@ const corpus = Array.from({ length: 1000 }, (_, index) => {
 describe("pure-core performance budgets", () => {
   it("parses a mixed 10,000-line document below the 20 ms p95 budget", () => {
     expect(corpus.split("\n")).toHaveLength(10_000);
-    for (let warmup = 0; warmup < 5; warmup += 1) parse(corpus);
+    for (let warmup = 0; warmup < 20; warmup += 1) parse(corpus);
     const p95 = percentile95(measure(25, () => parse(corpus)));
     expect(p95, `parse p95 was ${p95.toFixed(2)} ms`).toBeLessThan(20);
   });

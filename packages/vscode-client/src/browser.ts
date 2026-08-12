@@ -8,6 +8,7 @@ let serverWorker: Worker | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel("Logrotate Language Server", { log: true });
+  output.info("Activating Logrotate extension in the web extension host.");
   const server = vscode.Uri.joinPath(context.extensionUri, "dist", "browserServer.js");
   const worker = new Worker(server.toString(true), { name: "Logrotate Language Server" });
   serverWorker = worker;
@@ -28,7 +29,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       },
     ),
   );
+  output.info("Starting Logrotate language server in a Web Worker.");
   await client.start();
+  output.info("Logrotate language server started.");
   await vscode.commands.executeCommand(
     "setContext",
     "logrotate.externalValidationAvailable",

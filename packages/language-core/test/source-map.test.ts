@@ -6,7 +6,7 @@ describe("SourceMap", () => {
     const source = "ascii\n😀é\r\nlast\r";
     const map = new SourceMap(source);
     for (let offset = 0; offset <= source.length; offset += 1) {
-      if (source[offset - 1] === "\r" && source[offset] === "\n") continue;
+      if (offset > 0 && source.slice(offset - 1, offset + 1) === "\r\n") continue;
       expect(map.offsetAt(map.positionAt(offset))).toBe(offset);
     }
     expect(map.lines.map(({ newline }) => newline)).toEqual(["\n", "\r\n", "\r", ""]);

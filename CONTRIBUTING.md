@@ -1,8 +1,7 @@
 # Contributing
 
-Thank you for helping make logrotate configuration editing safer. By participating, you agree to
-follow the [Code of Conduct](CODE_OF_CONDUCT.md). Security reports belong in the private channel
-described in [SECURITY.md](SECURITY.md), not a public issue.
+Thank you for helping make logrotate configuration editing safer. Security reports belong in the
+private channel described in [SECURITY.md](SECURITY.md), not a public issue.
 
 ## Development setup
 
@@ -30,7 +29,9 @@ allowlist, or commit `dist`, editor test downloads, coverage output, VSIX files,
 5. Run the smallest relevant suite while iterating, then run `npm run verify`.
 6. Run `npm run test:integration` for desktop-client changes and `npm run test:web` for browser or
    filesystem-bridge changes.
-7. Make a focused commit only after the relevant gates pass.
+7. Run `npm run test:remote` for extension-host placement or installed-tool locality changes. It
+   requires Docker, OpenSSH, and the packaged VSIX.
+8. Make a focused commit only after the relevant gates pass.
 
 Useful commands are listed in [README.md](README.md). The architecture and host boundaries are
 documented in [docs/architecture.md](docs/architecture.md).

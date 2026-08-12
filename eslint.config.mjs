@@ -26,6 +26,7 @@ export default tseslint.config(
       },
     },
     rules: {
+      "@typescript-eslint/array-type": ["error", { default: "array" }],
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-confusing-void-expression": ["error", { ignoreArrowShorthand: true }],
       "@typescript-eslint/no-magic-numbers": "off",
@@ -42,6 +43,23 @@ export default tseslint.config(
         console: "readonly",
         process: "readonly",
       },
+    },
+  },
+  {
+    files: ["**/*.cjs"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      globals: {
+        Buffer: "readonly",
+        exports: "readonly",
+        process: "readonly",
+        require: "readonly",
+        setTimeout: "readonly",
+      },
+    },
+    rules: {
+      ...tseslint.configs.disableTypeChecked.rules,
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 );

@@ -4,7 +4,6 @@ import * as vscode from "vscode";
 const extensionId = "willibrandon.logrotate";
 
 interface ExtensionManifest {
-  readonly author: { readonly name: string };
   readonly browser: string;
   readonly license: string;
   readonly main: string;
@@ -23,7 +22,6 @@ suite("Logrotate desktop extension", () => {
     assert.equal(manifest.main, "./dist/extension.cjs");
     assert.equal(manifest.browser, "./dist/browser.js");
     assert.equal(manifest.license, "MIT");
-    assert.equal(manifest.author.name, "Brandon Williams");
 
     const installedPathPrefix = process.env["EXPECTED_INSTALLED_EXTENSION_PATH_PREFIX"];
     if (installedPathPrefix !== undefined) {
@@ -87,7 +85,62 @@ suite("Logrotate desktop extension", () => {
     assert.ok(completion.items.some(({ label }) => label === "compress"));
     assert.ok(edits !== undefined && edits.length > 0, "expected formatting edits");
   });
+
+  test("toggles configuration comments at indentation boundaries and leaves embedded shell to its language", async () => {
+    const source = [
+      "/var/log/application.log {",
+      "  daily",
+      "  ",
+      "  postrotate",
+      "    echo rotated",
+      "  endscript",
+      "}",
+      "",
+    ].join("\n");
+    const document = await vscode.workspace.openTextDocument({
+      language: "logrotate",
+      content: source,
+    });
+    const editor = await vscode.window.showTextDocument(document);
+    const selections = [0, 1, 2, 4].map((line) => {
+      const position = new vscode.Position(
+        line,
+        document.lineAt(line).firstNonWhitespaceCharacterIndex,
+      );
+      return new vscode.Selection(position, position);
+    });
+
+    await toggleCommentsAfterEmbeddedLanguagesLoad(editor, document, selections, source, 4);
+
+    assert.equal(document.lineAt(0).text, "# /var/log/application.log {");
+    assert.equal(document.lineAt(1).text, "  # daily");
+    assert.equal(document.lineAt(2).text, "  # ");
+    assert.equal(document.lineAt(4).text, "    echo rotated");
+
+    await vscode.commands.executeCommand("editor.action.commentLine");
+    assert.equal(document.getText(), source);
+  });
 });
+
+async function toggleCommentsAfterEmbeddedLanguagesLoad(
+  editor: vscode.TextEditor,
+  document: vscode.TextDocument,
+  selections: readonly vscode.Selection[],
+  source: string,
+  embeddedLine: number,
+): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    editor.selections = [...selections];
+    await vscode.commands.executeCommand("editor.action.commentLine");
+    if (document.lineAt(embeddedLine).text === "    echo rotated") return;
+
+    await vscode.commands.executeCommand("undo");
+    assert.equal(document.getText(), source);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.fail("embedded shell language did not become available to the comment command");
+}
 
 async function waitForDiagnostics(uri: vscode.Uri): Promise<readonly vscode.Diagnostic[]> {
   const deadline = Date.now() + 10_000;

@@ -12,7 +12,6 @@ private paths, or unredacted account names.
 
 Questions about logrotate itself belong in the
 [upstream logrotate project](https://github.com/logrotate/logrotate). Security reports must follow
-[SECURITY.md](SECURITY.md). Conduct reports must not be filed publicly.
+[SECURITY.md](SECURITY.md).
 
-This is a volunteer project maintained by Brandon Williams; response times are best effort. Open VSX
-namespace access and repository contact paths must be verified before the first public release.
+This is a volunteer project; response times are best effort.

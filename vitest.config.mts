@@ -20,6 +20,7 @@ const config: ViteUserConfig = defineConfig({
         "packages/language-core/src/**/*.ts",
         "packages/language-server/src/protocol.ts",
         "packages/language-server/src/server.ts",
+        "packages/vscode-client/src/common.ts",
         "packages/vscode-client/src/external-validation-policy.ts",
         "packages/vscode-client/src/external-validator.ts",
       ],

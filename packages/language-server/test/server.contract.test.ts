@@ -12,6 +12,7 @@ import type {
   SignatureHelp,
   TextEdit,
 } from "vscode-languageserver";
+import { detectedTargetVersionNotification } from "../src/protocol.js";
 import { createServerHarness, type ServerHarness } from "./harness.js";
 
 const uri = "file:///workspace/logrotate.conf";
@@ -48,6 +49,70 @@ describe("shared language server contract", () => {
     );
   });
 
+  it("logs initialization, document analysis, configuration, and close without document contents", async () => {
+    harness = await createServerHarness();
+    await harness.waitForLog(({ message }) => message.includes("language server initialized"));
+
+    const privateDocumentText = "/var/log/private {\n  never-log-this-content\n}\n";
+    await harness.open(uri, "logrotate", privateDocumentText);
+    await harness.waitForDiagnostics(uri, (items) => items.length > 0);
+    await harness.waitForLog(
+      ({ message }) => message.includes("Analyzed") && message.includes(uri),
+    );
+    await harness.configure({
+      logrotate: {
+        validation: { enable: true, maxProblems: 25 },
+        targetVersion: "latest\n[error] forged",
+      },
+    });
+    const configurationLog = await harness.waitForLog(({ message }) =>
+      message.includes("maxProblems=25"),
+    );
+    expect(configurationLog.message).not.toContain("\n");
+    expect(configurationLog.message).toContain("targetVersion=latest�[error] forged");
+    await harness.close(uri);
+    await harness.waitForLog(({ message }) => message.includes("Closed") && message.includes(uri));
+
+    const messages = harness.logMessages().map(({ message }) => message);
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("[initialize] Initializing Logrotate language server"),
+        expect.stringContaining("[initialized] Logrotate language server initialized"),
+        expect.stringContaining(`[textDocument/didOpen] Opened ${uri}`),
+        expect.stringMatching(
+          /\[textDocument\/publishDiagnostics\] Analyzed .*: \d+ diagnostic\(s\) across 1 resource\(s\)\./u,
+        ),
+        expect.stringContaining("[workspace/didChangeConfiguration] Configuration updated"),
+        expect.stringContaining(`[textDocument/didClose] Closed ${uri}`),
+      ]),
+    );
+    expect(messages.join("\n")).not.toContain("never-log-this-content");
+  });
+
+  it("formats virtual Git resources without encoded provider metadata", async () => {
+    harness = await createServerHarness();
+    const gitUri =
+      "git:/home/brandon/src/dotsider/deploy/caddy-metrics-logrotate.git?%7B%22path%22%3A%22%2Fhome%2Fbrandon%2Fsrc%2Fdotsider%2Fdeploy%2Fcaddy-metrics-logrotate%22%2C%22ref%22%3A%22%22%7D";
+    await harness.open(gitUri, "logrotate", "/var/log/caddy-metrics.log {\n  daily\n}\n");
+
+    const opened = await harness.waitForLog(({ message }) =>
+      message.includes("[textDocument/didOpen]"),
+    );
+    expect(opened.message).toContain(
+      "Opened git:/home/brandon/src/dotsider/deploy/caddy-metrics-logrotate (logrotate, version 1).",
+    );
+    expect(opened.message).not.toMatch(/%22|%2F|%3A|%7B|\.git\?/u);
+
+    await harness.waitForDiagnostics(gitUri);
+    const analyzed = await harness.waitForLog(
+      ({ message }) => message.includes("Analyzed") && message.includes("git:"),
+    );
+    expect(analyzed.message).toContain(
+      "Analyzed git:/home/brandon/src/dotsider/deploy/caddy-metrics-logrotate (version 1)",
+    );
+    expect(analyzed.message).not.toContain("?");
+  });
+
   it("debounces changes, publishes only the current version, caps findings, and clears on close", async () => {
     harness = await createServerHarness();
     await harness.open(uri, "logrotate", "UNKNOWN\n".repeat(120));
@@ -64,6 +129,32 @@ describe("shared language server contract", () => {
       uri,
       diagnostics: [],
     });
+  });
+
+  it("applies incremental document changes before reanalysis", async () => {
+    harness = await createServerHarness();
+    await harness.open(uri, "logrotate", "rotate nope\n", 1);
+    await harness.waitForDiagnostics(
+      uri,
+      (diagnostics, publication) =>
+        publication.version === 1 && diagnostics.some(({ code }) => code === "LR1104"),
+    );
+
+    await harness.changeIncremental(
+      uri,
+      {
+        start: { line: 0, character: "rotate ".length },
+        end: { line: 0, character: "rotate nope".length },
+      },
+      "4",
+      2,
+    );
+    const publication = await harness.waitForDiagnostics(
+      uri,
+      (diagnostics, current) => current.version === 2 && diagnostics.length === 0,
+    );
+
+    expect(publication).toMatchObject({ uri, version: 2, diagnostics: [] });
   });
 
   it("offers state-aware directives, arguments, paths, and no logrotate items in shell bodies", async () => {
@@ -127,6 +218,37 @@ describe("shared language server contract", () => {
     );
     expect(signature?.signatures[0]?.label).toBe("create <mode> <owner> <group>");
     expect(signature?.activeParameter).toBe(2);
+  });
+
+  it("uses a safely detected supported version for auto and falls back on invalid input", async () => {
+    harness = await createServerHarness();
+    await harness.configure({ logrotate: { targetVersion: "auto" } });
+    await harness.open(uri, "logrotate", "daily\n");
+    await harness.waitForDiagnostics(uri);
+
+    await harness.client.sendNotification(detectedTargetVersionNotification, {
+      uri,
+      version: "3.22.0",
+    });
+    await harness.waitForLog(({ message }) => message.includes("Detected local logrotate 3.22.0"));
+    expect(
+      markdown(await request<Hover | null>(harness, "textDocument/hover", position(0, 2))),
+    ).toContain("Target: 3.22 (detected)");
+
+    await harness.client.sendNotification(detectedTargetVersionNotification, {
+      uri,
+      version: "3.22.0\n[error] forged",
+    });
+    await harness.waitForLog(({ message }) => message.includes("Local version unavailable"));
+    expect(
+      markdown(await request<Hover | null>(harness, "textDocument/hover", position(0, 2))),
+    ).toContain("Target: 3.22 (latest fallback)");
+    expect(
+      harness
+        .logMessages()
+        .map(({ message }) => message)
+        .join("\n"),
+    ).not.toContain("[error] forged");
   });
 
   it("provides symbols, folds, selection, links, definition, references, and semantic refinements", async () => {
@@ -230,7 +352,68 @@ describe("shared language server contract", () => {
       kind: "quickfix",
       isPreferred: true,
     });
+    expect(actions).toContainEqual(
+      expect.objectContaining({
+        title: "Open upstream documentation for LR1001",
+        kind: "quickfix",
+        isPreferred: false,
+        diagnostics: [expect.objectContaining({ code: "LR1001" })],
+        command: {
+          title: "Open upstream documentation",
+          command: "logrotate.openDirectiveDocumentation",
+          arguments: [
+            "https://github.com/logrotate/logrotate/blob/3be1e9ccffe0c2245ed596183c74913d553f9f18/logrotate.8.in",
+          ],
+        },
+      }),
+    );
     expect(actions.some(({ title }) => /reorder/iu.test(title))).toBe(false);
+  });
+
+  it("quotes only an explicitly selected path containing whitespace", async () => {
+    harness = await createServerHarness();
+    const source = "/var/log/my app.log {\n}\n";
+    await harness.open(uri, "logrotate", source);
+    const selectedEnd = source.indexOf(" {");
+    const actions = await request<CodeAction[]>(harness, "textDocument/codeAction", {
+      textDocument: { uri },
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: selectedEnd },
+      },
+      context: { diagnostics: [] },
+    });
+    expect(actions).toEqual([
+      {
+        title: "Quote selected path",
+        kind: "quickfix",
+        isPreferred: false,
+        edit: {
+          changes: {
+            [uri]: [
+              {
+                range: {
+                  start: { line: 0, character: 0 },
+                  end: { line: 0, character: selectedEnd },
+                },
+                newText: '"/var/log/my app.log"',
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    expect(
+      await request<CodeAction[]>(harness, "textDocument/codeAction", {
+        textDocument: { uri },
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: "/var/log/my".length },
+        },
+        context: { diagnostics: [] },
+      }),
+    ).toEqual([]);
   });
 
   it("keeps state files read-only while providing diagnostics and warning hover", async () => {

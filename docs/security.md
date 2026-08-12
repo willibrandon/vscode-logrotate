@@ -20,6 +20,10 @@ timeout, bounded stdout/stderr, sanitized diagnostics, and a process-group kill 
 trust is checked by policy and again immediately before process creation. Deactivation aborts active
 requests.
 
+Automatic target detection is separate from validation. It runs one bounded `logrotate --version`
+probe only when the user selects `auto` in a trusted local desktop host. It uses no shell, applies
+the same immediate trust check, and falls back to the latest reviewed model without a notification.
+
 Host results are labeled with the detected binary version and are always secondary to the internal
 parser. The extension does not pass document content through stdin and never requests a rotation.
 

@@ -36,7 +36,11 @@ The upstream logrotate checkout is a pinned CI input, never shipped or vendored.
 Clients, output channels, JSON-RPC request registrations, diagnostics, timers, Workers, abort
 controllers, and process groups are owned by an extension or server lifecycle and disposed on stop.
 Diagnostics are version-checked after debounce; shutdown waits for active jobs. Include traversal is
-depth-first in inline source order with resource and cancellation limits.
+depth-first in inline source order with resource and cancellation limits. Parsed includes are reused
+across analyses only while their normalized URI, filesystem identity, target version, and inherited
+state match. Desktop clients watch exactly the loaded local files and directories, coalesce
+resources shared by multiple roots, and invalidate only affected graphs. Browser and
+virtual-resource clients continue to rely on document events and explicit refreshes.
 
 ## Packaging
 

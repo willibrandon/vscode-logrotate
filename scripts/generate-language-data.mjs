@@ -167,7 +167,7 @@ const grammar = {
         },
         {
           match:
-            "^(\\s*)((?:\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')(?:\\s+(?:\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'))*)(\\{)?\\s*$",
+            "^(\\s*)((?:\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')(?:\\s+(?:\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*'))*)\\s*(\\{)?\\s*$",
           captures: {
             2: { name: "string.quoted.path.logrotate" },
             3: { name: "punctuation.section.block.begin.logrotate" },
@@ -223,23 +223,28 @@ const markdownGrammar = {
   name: "Logrotate Markdown code blocks",
   scopeName: "source.logrotate.markdown",
   injectionSelector: "L:text.html.markdown",
-  patterns: [{ include: "#fenced-logrotate" }],
+  patterns: [{ include: "#fenced-logrotate-backtick" }, { include: "#fenced-logrotate-tilde" }],
   repository: {
-    "fenced-logrotate": {
-      name: "markup.fenced_code.block.markdown",
-      begin:
-        "(^|\\G)(\\s*)(`{3,}|~{3,})\\s*(?i:(logrotate|logrotate\\.conf|logrotate-config))(?:\\s+[^`~]*)?$",
-      end: "(^|\\G)(?:\\2|\\s{0,3})(\\3)\\s*$",
-      contentName: "meta.embedded.block.logrotate",
-      beginCaptures: {
-        3: { name: "punctuation.definition.markdown" },
-        4: { name: "fenced_code.block.language" },
-      },
-      endCaptures: { 3: { name: "punctuation.definition.markdown" } },
-      patterns: [{ include: "source.logrotate" }],
-    },
+    "fenced-logrotate-backtick": fencedLogrotateMarkdown("`"),
+    "fenced-logrotate-tilde": fencedLogrotateMarkdown("~"),
   },
 };
+
+function fencedLogrotateMarkdown(delimiter) {
+  const escapedDelimiter = delimiter === "`" ? "`" : "~";
+  return {
+    name: "markup.fenced_code.block.markdown",
+    begin: `(^|\\G)(\\s*)((${escapedDelimiter}){3,})\\s*(?i:(logrotate|logrotate\\.conf|logrotate-config))(?:\\s+[^\`~]*)?$`,
+    end: "(^|\\G)(\\2|\\s{0,3})(\\3\\4*)\\s*$",
+    contentName: "meta.embedded.block.logrotate",
+    beginCaptures: {
+      3: { name: "punctuation.definition.markdown" },
+      5: { name: "fenced_code.block.language" },
+    },
+    endCaptures: { 3: { name: "punctuation.definition.markdown" } },
+    patterns: [{ include: "source.logrotate" }],
+  };
+}
 
 const snippets = {
   "Minimal rotation stanza": {

@@ -6,6 +6,13 @@ export interface ValidationContext {
   readonly languageId: string;
 }
 
+export interface TargetVersionDetectionContext {
+  readonly isDesktop: boolean;
+  readonly isTrusted: boolean;
+  readonly scheme: string | undefined;
+  readonly targetVersion: string;
+}
+
 export type ValidationUnavailability =
   "browser" | "untrusted" | "virtual" | "unsaved" | "wrong-language";
 
@@ -29,4 +36,13 @@ export function explainUnavailability(reason: ValidationUnavailability): string 
     "wrong-language": "Open a logrotate configuration file before running installed validation.",
   };
   return explanations[reason];
+}
+
+export function canDetectTargetVersion(context: TargetVersionDetectionContext): boolean {
+  return (
+    context.targetVersion === "auto" &&
+    context.isDesktop &&
+    context.isTrusted &&
+    context.scheme === "file"
+  );
 }

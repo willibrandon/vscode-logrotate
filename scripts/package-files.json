@@ -10,6 +10,7 @@
   "dist/extension.cjs",
   "dist/nodeServer.cjs",
   "language-configuration.json",
+  "media/icon.png",
   "package.json",
   "package.nls.json",
   "snippets/logrotate.json",

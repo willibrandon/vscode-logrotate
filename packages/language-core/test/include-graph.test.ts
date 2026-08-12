@@ -29,6 +29,9 @@ function fakeFileSystem(
       const base = baseUri.slice(0, baseUri.lastIndexOf("/") + 1);
       return target.startsWith("/") ? `file://${target}` : `${base}${target}`;
     },
+    join(baseDirectoryUri: string, entry: string): string {
+      return `${baseDirectoryUri.replace(/\/$/u, "")}/${entry}`;
+    },
     normalize(uri: string): string {
       return uri.replaceAll("/./", "/");
     },

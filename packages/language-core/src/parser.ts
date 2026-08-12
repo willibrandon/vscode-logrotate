@@ -604,11 +604,46 @@ function validateArguments(
   ) {
     argumentError(context, "LR1106", "File modes must be three or four octal digits.", first);
   }
+  const identityArguments = identityArgumentPair(kind, args);
+  const user = identityArguments?.[0];
+  if (user !== undefined && isInvalidForcedNumericIdentity(user.value)) {
+    argumentError(
+      context,
+      "LR1109",
+      "A forced numeric user ID must be a decimal integer below 2147483647.",
+      user,
+    );
+  }
+  const group = identityArguments?.[1];
+  if (group !== undefined && isInvalidForcedNumericIdentity(group.value)) {
+    argumentError(
+      context,
+      "LR1110",
+      "A forced numeric group ID must be a decimal integer below 2147483647.",
+      group,
+    );
+  }
   if (
     ["path", "command", "extension", "mail-address", "date-format"].includes(kind) &&
     first.value === ""
   ) {
     argumentError(context, "LR1108", "This argument cannot be empty.", first);
+  }
+  if (kind === "mail-address" && containsAddressWhitespace(first.value)) {
+    argumentError(
+      context,
+      "LR1111",
+      "A mail address cannot contain whitespace.",
+      decodedArgumentSpan(context, first),
+    );
+  }
+  if (kind === "taboo-list" && first.value === "+" && args.length === 1) {
+    argumentError(
+      context,
+      "LR1112",
+      "The + operator must be followed by at least one taboo pattern.",
+      first,
+    );
   }
   if (kind === "date-format") {
     const target = resolveTargetVersion(context.options.targetVersion ?? "latest", {
@@ -637,6 +672,50 @@ function validateArguments(
   }
 }
 
+function identityArgumentPair(
+  kind: string,
+  args: readonly { readonly start: number; readonly end: number; readonly value: string }[],
+):
+  | readonly [
+      { readonly start: number; readonly end: number; readonly value: string } | undefined,
+      { readonly start: number; readonly end: number; readonly value: string } | undefined,
+    ]
+  | undefined {
+  if (kind === "user-group") return [args[0], args[1]];
+  if (kind !== "create" && kind !== "createolddir") return undefined;
+  if (args.length === 2) return [args[0], args[1]];
+  if (args.length >= 3) return [args[1], args[2]];
+  return undefined;
+}
+
+function isInvalidForcedNumericIdentity(value: string): boolean {
+  if (!value.startsWith(":")) return false;
+  let index = value[1] === "+" ? 2 : 1;
+  if (index === value.length) return true;
+  for (let cursor = index; cursor < value.length; cursor += 1) {
+    const code = value.charCodeAt(cursor);
+    if (code < 48 || code > 57) return true;
+  }
+  while (value[index] === "0") index += 1;
+  const digits = value.length - index;
+  return digits > 10 || (digits === 10 && value.slice(index) >= "2147483647");
+}
+
+function decodedArgumentSpan(context: ParseContext, argument: TextSpan): TextSpan {
+  const opening = context.source[argument.start];
+  return (opening === '"' || opening === "'") && context.source[argument.end - 1] === opening
+    ? { start: argument.start + 1, end: argument.end - 1 }
+    : argument;
+}
+
+function containsAddressWhitespace(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 32 || code === 127) return true;
+  }
+  return false;
+}
+
 function projectHeaderForArguments(header: string): string {
   if (!header.includes("\n") && !header.includes("\r")) {
     return header;
@@ -647,27 +726,27 @@ function projectHeaderForArguments(header: string): string {
 
   const characters = header.split("");
   let lineStart = 0;
-  for (let index = 0; index <= characters.length; index += 1) {
+  for (let index = 0; index < characters.length; index += 1) {
     const character = characters[index];
-    if (character !== "\r" && character !== "\n" && index !== characters.length) {
+    if (character !== "\r" && character !== "\n") {
       continue;
     }
-    const line = characters.slice(lineStart, index).join("");
-    if (line.trimStart().startsWith("#")) {
-      for (let cursor = lineStart; cursor < index; cursor += 1) {
-        characters[cursor] = " ";
-      }
-    }
-    if (index < characters.length) {
+    blankHeaderComment(characters, lineStart, index);
+    characters[index] = " ";
+    if (character === "\r" && characters[index + 1] === "\n") {
+      index += 1;
       characters[index] = " ";
-      if (character === "\r" && characters[index + 1] === "\n") {
-        index += 1;
-        characters[index] = " ";
-      }
     }
     lineStart = index + 1;
   }
+  blankHeaderComment(characters, lineStart, characters.length);
   return characters.join("");
+}
+
+function blankHeaderComment(characters: string[], start: number, end: number): void {
+  const line = characters.slice(start, end).join("");
+  if (!line.trimStart().startsWith("#")) return;
+  for (let index = start; index < end; index += 1) characters[index] = " ";
 }
 
 function closestDirective(candidate: string): string | undefined {

@@ -1,4 +1,4 @@
-import { RequestType } from "vscode-languageserver-protocol";
+import { NotificationType, RequestType } from "vscode-languageserver-protocol";
 
 export interface ReadFileParams {
   readonly uri: string;
@@ -12,6 +12,26 @@ export interface ResourceStatResult {
   readonly type: "file" | "directory" | "other";
   readonly size: number;
   readonly mtime: number;
+  readonly etag?: string;
+}
+
+export interface LoadedIncludesParams {
+  readonly rootUri: string;
+  readonly resources: readonly LoadedIncludeResource[];
+}
+
+export interface LoadedIncludeResource {
+  readonly uri: string;
+  readonly type: "file" | "directory";
+}
+
+export interface IncludedResourceChangedParams {
+  readonly uri: string;
+}
+
+export interface DetectedTargetVersionParams {
+  readonly uri: string;
+  readonly version: string | null;
 }
 
 export const readFileRequest: RequestType<ReadFileParams, string, void> = new RequestType<
@@ -26,3 +46,9 @@ export const statRequest: RequestType<ReadFileParams, ResourceStatResult, void> 
   ResourceStatResult,
   void
 >("logrotate/fs/stat");
+export const loadedIncludesNotification: NotificationType<LoadedIncludesParams> =
+  new NotificationType<LoadedIncludesParams>("logrotate/includes/loaded");
+export const includedResourceChangedNotification: NotificationType<IncludedResourceChangedParams> =
+  new NotificationType<IncludedResourceChangedParams>("logrotate/includes/changed");
+export const detectedTargetVersionNotification: NotificationType<DetectedTargetVersionParams> =
+  new NotificationType<DetectedTargetVersionParams>("logrotate/targetVersion/detected");

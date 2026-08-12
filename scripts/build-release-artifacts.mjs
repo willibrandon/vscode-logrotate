@@ -11,13 +11,31 @@ const manifest = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"
 const vsix = resolve(root, `dist/logrotate-${manifest.version}.vsix`);
 const sbom = resolve(root, `dist/logrotate-${manifest.version}.cdx.json`);
 const checksum = resolve(root, `dist/logrotate-${manifest.version}.sha256`);
+const minorVersion = Number.parseInt(manifest.version.split(".")[1] ?? "", 10);
+if (!Number.isSafeInteger(minorVersion)) {
+  throw new Error(`Extension version must be major.minor.patch, received ${manifest.version}.`);
+}
+const preRelease = minorVersion % 2 === 1;
+const { stdout: sourceRevisionOutput } = await execute("git", ["rev-parse", "HEAD"], {
+  cwd: root,
+});
+const sourceRevision = sourceRevisionOutput.trim();
+if (!/^[0-9a-f]{40}$/u.test(sourceRevision)) {
+  throw new Error(`Unable to determine the source revision, received ${sourceRevision}.`);
+}
 
 await Promise.all([
   rm(vsix, { force: true }),
   rm(sbom, { force: true }),
   rm(checksum, { force: true }),
 ]);
-await createVSIX({ cwd: root, packagePath: vsix, dependencies: false });
+await createVSIX({
+  cwd: root,
+  packagePath: vsix,
+  dependencies: false,
+  githubBranch: sourceRevision,
+  preRelease,
+});
 await execute(
   process.execPath,
   [
@@ -44,4 +62,6 @@ const sbomText = await readFile(sbom, "utf8");
 if (/(?:\/home\/[^/\s]+|\/Users\/[^/\s]+|[A-Za-z]:\\\\Users\\\\[^\\\s]+)/u.test(sbomText)) {
   throw new Error("The generated SBOM contains a private build path.");
 }
-console.log(`Created ${basename(vsix)}, ${basename(checksum)}, and ${basename(sbom)}.`);
+console.log(
+  `Created ${basename(vsix)}, ${basename(checksum)}, and ${basename(sbom)} (${preRelease ? "pre-release" : "stable"}).`,
+);

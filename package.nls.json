@@ -10,5 +10,5 @@
   "configuration.targetVersion": "Logrotate grammar version used by built-in analysis. Auto uses the installed binary only when host validation is available.",
   "configuration.externalValidation.mode": "Run the installed logrotate binary only after saving a trusted local file. Disabled by default.",
   "configuration.executablePath": "Executable used for explicitly enabled host validation. This restricted setting is ignored in untrusted workspaces.",
-  "configuration.trace.server": "Language Server Protocol trace level. Document content is not written to the extension output channel by default."
+  "configuration.trace.server": "Language Server Protocol trace detail. Default info logs omit document content; explicit protocol traces can include it."
 }

@@ -9,12 +9,21 @@ import { runInstalledDesktopSmoke } from "./run-installed-desktop-smoke.mjs";
 
 const execute = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
+const extensionPublicFlag = 256;
+const extensionValidatedFlag = 4;
+const versionValidatedFlag = 1;
 
 export function isExpectedMarketplaceRelease(metadata, expected) {
   if (typeof metadata !== "object" || metadata === null) return false;
   const publisher = metadata.publisher;
   if (typeof publisher !== "object" || publisher === null) return false;
   if (publisher.publisherName !== expected.publisher || metadata.extensionName !== expected.name) {
+    return false;
+  }
+  if (
+    !hasFlag(metadata.flags, extensionPublicFlag) ||
+    !hasFlag(metadata.flags, extensionValidatedFlag)
+  ) {
     return false;
   }
   if (!Array.isArray(metadata.versions)) return false;
@@ -26,6 +35,7 @@ export function isExpectedMarketplaceRelease(metadata, expected) {
     ) {
       return false;
     }
+    if (!hasFlag(candidate.flags, versionValidatedFlag)) return false;
     const properties = Array.isArray(candidate.properties) ? candidate.properties : [];
     const preRelease = properties.some(
       (property) =>
@@ -48,6 +58,10 @@ export function isExpectedMarketplaceRelease(metadata, expected) {
   });
 }
 
+function hasFlag(value, flag) {
+  return typeof value === "number" && (value & flag) === flag;
+}
+
 export async function waitForMarketplaceRelease(options) {
   const { attempts, delay, expected, query } = options;
   let lastError;
@@ -67,6 +81,32 @@ export async function waitForMarketplaceRelease(options) {
     `Marketplace release verification failed after ${attempts} attempt${attempts === 1 ? "" : "s"}.`,
     { cause: lastError },
   );
+}
+
+export async function waitForMarketplaceInstallation(options) {
+  const { attempts, delay, install } = options;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await install();
+    } catch (error) {
+      if (!isMarketplacePropagationError(error)) throw error;
+      lastError = error;
+    }
+    if (attempt < attempts) await delay();
+  }
+  throw new Error(
+    `Marketplace installation verification failed after ${attempts} attempt${attempts === 1 ? "" : "s"}.`,
+    { cause: lastError },
+  );
+}
+
+export function isMarketplacePropagationError(error) {
+  if (typeof error !== "object" || error === null) return false;
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  const stderr = "stderr" in error && typeof error.stderr === "string" ? error.stderr : "";
+  const output = `${message}\n${stderr}`;
+  return /Extension '[^']+' not found\./u.test(output);
 }
 
 async function queryMarketplace(extensionId) {
@@ -101,13 +141,14 @@ async function verifyMarketplaceRelease() {
     sha256,
   };
   const extensionId = `${expected.publisher}.${expected.name}`;
-  const attempts = positiveInteger(process.env.MARKETPLACE_VERIFY_ATTEMPTS, 20);
+  const attempts = positiveInteger(process.env.MARKETPLACE_VERIFY_ATTEMPTS, 40);
   const interval = positiveInteger(process.env.MARKETPLACE_VERIFY_INTERVAL_MS, 30_000);
+  const delay = async () =>
+    new Promise((resolvePromise) => globalThis.setTimeout(resolvePromise, interval));
 
   await waitForMarketplaceRelease({
     attempts,
-    delay: async () =>
-      new Promise((resolvePromise) => globalThis.setTimeout(resolvePromise, interval)),
+    delay,
     expected,
     query: async () => queryMarketplace(extensionId),
   });
@@ -117,14 +158,19 @@ async function verifyMarketplaceRelease() {
   const userDataDirectory = resolve(temporaryRoot, "user-data");
   await Promise.all([mkdir(extensionsDirectory), mkdir(userDataDirectory)]);
   try {
-    await runInstalledDesktopSmoke({
-      expectedIdentity: `${extensionId}@${expected.version}`,
-      extensionsDirectory,
-      installTarget: `${extensionId}@${expected.version}`,
-      preRelease: expected.preRelease,
-      root,
-      userDataDirectory,
-      version: "stable",
+    await waitForMarketplaceInstallation({
+      attempts,
+      delay,
+      install: async () =>
+        runInstalledDesktopSmoke({
+          expectedIdentity: `${extensionId}@${expected.version}`,
+          extensionsDirectory,
+          installTarget: `${extensionId}@${expected.version}`,
+          preRelease: expected.preRelease,
+          root,
+          userDataDirectory,
+          version: "stable",
+        }),
     });
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });

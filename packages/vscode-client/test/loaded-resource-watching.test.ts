@@ -99,10 +99,14 @@ const vscodeMock = vi.hoisted(() => {
   }
 
   const watchers: FakeWatcher[] = [];
+  let rejectedWatcherPattern: string | undefined;
   return {
     FakeRelativePattern,
     FakeUri,
     watchers,
+    rejectWatcherPattern(pattern: string | undefined): void {
+      rejectedWatcherPattern = pattern;
+    },
     module: {
       Uri: {
         parse(value: string): FakeUri {
@@ -116,6 +120,14 @@ const vscodeMock = vi.hoisted(() => {
       RelativePattern: FakeRelativePattern,
       workspace: {
         createFileSystemWatcher(pattern: FakeRelativePattern | string): FakeWatcher {
+          if (
+            rejectedWatcherPattern !== undefined &&
+            (pattern instanceof FakeRelativePattern ? pattern.pattern : pattern).includes(
+              rejectedWatcherPattern,
+            )
+          ) {
+            throw new Error("watcher creation rejected");
+          }
           const watcher = new FakeWatcher(pattern);
           watchers.push(watcher);
           return watcher;
@@ -135,6 +147,7 @@ class FakeLanguageClient {
   readonly #handlers = new Map<string, (params: unknown) => void>();
   public readonly sent: { readonly method: string; readonly params: unknown }[] = [];
   public notificationSubscriptionDisposeCount = 0;
+  public nextSendError: Error | undefined;
 
   public onNotification(
     type: NotificationLike,
@@ -151,6 +164,11 @@ class FakeLanguageClient {
 
   public sendNotification(type: NotificationLike, params: unknown): Promise<void> {
     this.sent.push({ method: type.method, params });
+    if (this.nextSendError !== undefined) {
+      const error = this.nextSendError;
+      this.nextSendError = undefined;
+      return Promise.reject(error);
+    }
     return Promise.resolve();
   }
 
@@ -162,6 +180,7 @@ class FakeLanguageClient {
 describe("loaded include watching", () => {
   beforeEach(() => {
     vscodeMock.watchers.length = 0;
+    vscodeMock.rejectWatcherPattern(undefined);
   });
 
   it("deduplicates shared local resources, ignores virtual resources, refreshes every event, and disposes exactly once", async () => {
@@ -209,6 +228,21 @@ describe("loaded include watching", () => {
     expect(String((directoryWatcher?.pattern as { base?: unknown }).base)).toBe(directory);
     expect(specialWatcher?.pattern).toMatchObject({ pattern: "name[[]prod[]][*][?].conf" });
     expect(String((specialWatcher?.pattern as { base?: unknown }).base)).toBe(`${directory}/`);
+
+    vscodeMock.rejectWatcherPattern("cannot-watch");
+    client.receive(loadedIncludesNotification, {
+      rootUri: "file:///workspace/unwatchable-root.conf",
+      resources: [
+        { uri: "file:///etc/logrotate.d/cannot-watch", type: "file" },
+        { uri: "not a URI", type: "file" },
+      ],
+    });
+    expect(warnings).toEqual(["Unable to watch included resource: watcher creation rejected"]);
+    client.receive(loadedIncludesNotification, {
+      rootUri: "file:///workspace/unwatchable-root.conf",
+      resources: [],
+    });
+    vscodeMock.rejectWatcherPattern(undefined);
 
     directoryWatcher?.fire("create", "file:///etc/logrotate.d/newly-created");
     await Promise.resolve();
@@ -269,7 +303,16 @@ describe("loaded include watching", () => {
     });
     const thirdWatcher = vscodeMock.watchers[4];
     expect(thirdWatcher).toBeDefined();
-    for (const subscription of [...subscriptions].reverse()) subscription.dispose();
+    client.nextSendError = new Error("refresh rejected");
+    thirdWatcher?.fire("change", third);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(errors).toEqual(["Unable to refresh changed included resource: refresh rejected"]);
+
+    const watcherLedger = subscriptions.at(-1);
+    watcherLedger?.dispose();
+    watcherLedger?.dispose();
+    subscriptions[0]?.dispose();
     expect(thirdWatcher?.disposeCount).toBe(1);
     expect(client.notificationSubscriptionDisposeCount).toBe(1);
     client.receive(loadedIncludesNotification, {
@@ -277,7 +320,6 @@ describe("loaded include watching", () => {
       resources: [{ uri: "file:///etc/logrotate.d/after-disposal", type: "file" }],
     });
     expect(vscodeMock.watchers).toHaveLength(5);
-    expect(warnings).toEqual([]);
-    expect(errors).toEqual([]);
+    expect(warnings).toEqual(["Unable to watch included resource: watcher creation rejected"]);
   });
 });

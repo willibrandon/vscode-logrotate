@@ -29,6 +29,17 @@ const themeImages = [
   "dracula.png",
   "one-dark-pro.png",
 ] as const;
+const docsSiteDocuments = [
+  "docs-site/src/content/docs/index.md",
+  "docs-site/src/content/docs/getting-started.md",
+  "docs-site/src/content/docs/recognized-files.md",
+  "docs-site/src/content/docs/editing.md",
+  "docs-site/src/content/docs/validation.md",
+  "docs-site/src/content/docs/settings.md",
+  "docs-site/src/content/docs/commands.md",
+  "docs-site/src/content/docs/privacy-and-trust.md",
+  "docs-site/src/content/docs/troubleshooting.md",
+] as const;
 
 describe("documentation contract", () => {
   it("ships every required user, contributor, maintenance, legal, and localization document", async () => {
@@ -76,6 +87,61 @@ describe("documentation contract", () => {
     expect(readme).toContain("Browser and virtual workspaces");
     expect(readme).toContain("secondary opinion, not the extension parser or formatter");
     expect(readme).toContain("no telemetry and makes no runtime network requests");
+    expect(readme).toContain(
+      "https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate",
+    );
+  });
+
+  it("keeps the user site complete, concise, and independent from maintainer identity", async () => {
+    const documents = await Promise.all(
+      docsSiteDocuments.map(
+        async (path) => [path, await readFile(resolve(root, path), "utf8")] as const,
+      ),
+    );
+    const combined = documents.map(([, source]) => source).join("\n");
+
+    for (const setting of [
+      "logrotate.validation.enable",
+      "logrotate.validation.maxProblems",
+      "logrotate.targetVersion",
+      "logrotate.externalValidation.mode",
+      "logrotate.executablePath",
+      "logrotate.trace.server",
+    ]) {
+      expect(combined, setting).toContain(setting);
+    }
+    for (const command of [
+      "Validate Current File with Installed Logrotate",
+      "Restart Language Server",
+      "Show Language Server Output",
+      "Open Directive Documentation",
+    ]) {
+      expect(combined, command).toContain(command);
+    }
+
+    for (const [path, source] of documents) {
+      const body = source.replace(/^---\n[\s\S]*?\n---\n/u, "");
+      expect(body, `${path} contains an internal Markdown heading`).not.toMatch(/^#{1,6}\s/mu);
+      expect(body, `${path} contains a Markdown list`).not.toMatch(/^\s*[-*+]\s/mu);
+      expect(source, `${path} contains a dash character outside plain punctuation`).not.toMatch(
+        /[–—]/u,
+      );
+      expect(source, `${path} contains the maintainer's full name`).not.toContain(
+        "Brandon Williams",
+      );
+    }
+  });
+
+  it("configures the user site for its GitHub Pages subpath", async () => {
+    const config = await readFile(resolve(root, "docs-site/astro.config.mjs"), "utf8");
+    const manifest = JSON.parse(
+      await readFile(resolve(root, "docs-site/package.json"), "utf8"),
+    ) as Readonly<Record<string, unknown>>;
+
+    expect(config).toContain('site: "https://willibrandon.github.io"');
+    expect(config).toContain('base: "/vscode-logrotate"');
+    expect(config).toContain('trailingSlash: "always"');
+    expect(manifest).toMatchObject({ private: true, packageManager: "npm@11.17.0" });
   });
 
   it("keeps committed visual-smoke evidence complete, bounded, and linked from the README", async () => {

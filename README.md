@@ -3,6 +3,11 @@
 Language support for [logrotate](https://github.com/logrotate/logrotate) configuration and state
 files in Visual Studio Code desktop, remote, and web extension hosts.
 
+User documentation is available at
+[willibrandon.github.io/vscode-logrotate](https://willibrandon.github.io/vscode-logrotate/). Install
+the extension from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate).
+
 **Version 0.1.9 is an early public pre-release.** The language model is currently pinned to
 logrotate `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later reviewed syntax).
 

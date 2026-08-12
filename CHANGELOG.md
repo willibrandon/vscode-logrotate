@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-12
+
 ### Added
 
 - Initial logrotate configuration and state-file language support.
@@ -18,11 +20,6 @@ All notable changes to this project are documented here. The format follows
 - Safe quick fixes for spelling, prerequisites, missing terminators, and explicitly selected paths,
   with pinned upstream documentation actions for diagnostics.
 - Unit, property, grammar, JSON-RPC contract, performance, desktop, web, and package tests.
-
-## [0.1.0] - Unreleased
-
-This version is reserved for the first Visual Studio Marketplace release. Publisher ownership and
-the release credential must be verified before the date is set or the tag is created.
 
 [Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.0

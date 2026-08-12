@@ -6,6 +6,9 @@ import { chromium } from "playwright";
 const root = resolve(import.meta.dirname, "..");
 const outputDirectory = resolve(root, "docs/images");
 const debuggingPort = 9333;
+const captureWidth = 1_000;
+const captureHeight = 310;
+const deviceScaleFactor = 2;
 const themes = [
   { label: "Dark+", file: "dark-plus.png" },
   { label: "Light+", file: "light-plus.png" },
@@ -21,6 +24,7 @@ const testWeb = await open({
   browserOptions: [
     `--remote-debugging-port=${debuggingPort}`,
     "--remote-allow-origins=*",
+    `--force-device-scale-factor=${deviceScaleFactor}`,
     "--window-size=1440,900",
   ],
   extensionDevelopmentPath: root,
@@ -53,10 +57,11 @@ try {
     if (bounds === null) throw new Error(`Unable to measure the editor for ${theme.label}.`);
     await page.screenshot({
       path: resolve(outputDirectory, theme.file),
+      scale: "device",
       clip: {
         ...bounds,
-        width: Math.min(bounds.width, 1_000),
-        height: Math.min(bounds.height, 310),
+        width: Math.min(bounds.width, captureWidth),
+        height: Math.min(bounds.height, captureHeight),
       },
     });
     process.stdout.write(`Captured ${theme.label} as docs/images/${theme.file}.\n`);

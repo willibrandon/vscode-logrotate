@@ -29,7 +29,7 @@ scripts. Its formatter preserves the raw bytes of script bodies and does not reo
 
 ## Preview
 
-![Logrotate highlighting in VS Code Dark+](docs/images/dark-plus.png)
+![Logrotate highlighting in the Dracula theme](docs/images/dracula.png)
 
 The grammar uses standard, theme-neutral TextMate scopes. The reproducible
 [theme smoke check](docs/theme-smoke.md) also covers high contrast and three popular third-party

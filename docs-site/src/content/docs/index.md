@@ -13,7 +13,7 @@ navigation, and formatting follow when the language server starts.
 [Install Logrotate from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate),
 then open a configuration file. A local logrotate installation is not required for normal editing.
 
-![A logrotate configuration with syntax highlighting in Visual Studio Code Dark+](../../../../docs/images/dark-plus.png)
+![A logrotate configuration with syntax highlighting in the Dracula theme](../../../../docs/images/dracula.png)
 
 The extension understands includes, script blocks, state files, and the syntax reviewed for
 logrotate 3.22. It works in local, remote, virtual, and browser workspaces where the corresponding

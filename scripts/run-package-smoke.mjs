@@ -93,7 +93,7 @@ async function requireFile(path) {
 
 async function requirePackagedReadmeImages(extensionDirectory, sourceRevision) {
   const readme = await readFile(resolve(extensionDirectory, "readme.md"), "utf8");
-  const expectedPreview = `https://github.com/willibrandon/vscode-logrotate/raw/${sourceRevision}/docs/images/dark-plus.png`;
+  const expectedPreview = `https://github.com/willibrandon/vscode-logrotate/raw/${sourceRevision}/docs/images/dracula.png`;
   if (!readme.includes(`](${expectedPreview})`)) {
     throw new Error(`Packaged README does not use the immutable preview URL ${expectedPreview}.`);
   }

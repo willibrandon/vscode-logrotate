@@ -159,13 +159,13 @@ describe("documentation contract", () => {
     const readme = await readFile(resolve(root, "README.md"), "utf8");
     const evidence = await readFile(resolve(root, "docs/theme-smoke.md"), "utf8");
 
-    expect(readme).toContain("docs/images/dark-plus.png");
+    expect(readme).toContain("docs/images/dracula.png");
     expect(readme).toContain("docs/theme-smoke.md");
     for (const image of themeImages) {
       const bytes = await readFile(resolve(root, "docs/images", image));
       expect(bytes.subarray(0, 8).toString("hex"), image).toBe("89504e470d0a1a0a");
-      expect(bytes.readUInt32BE(16), image).toBe(1_000);
-      expect(bytes.readUInt32BE(20), image).toBe(310);
+      expect(bytes.readUInt32BE(16), image).toBe(2_000);
+      expect(bytes.readUInt32BE(20), image).toBe(620);
       expect(bytes.byteLength, image).toBeLessThan(100_000);
       expect(evidence, image).toContain(`images/${image}`);
     }

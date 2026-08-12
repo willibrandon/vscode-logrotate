@@ -26,6 +26,7 @@ const extensionIdentifier = `${manifest.publisher}.${manifest.name}`;
 const expectedRemoteExtensionPath = `/home/vscode/.vscode-server/extensions/${extensionIdentifier}-${manifest.version}`;
 const key = resolve(temporaryRoot, "id_ed25519");
 const sshConfig = resolve(temporaryRoot, "ssh-config");
+const bootstrapUserDataDirectory = resolve(temporaryRoot, "bootstrap-user-data");
 const userDataDirectory = resolve(temporaryRoot, "user-data");
 const extensionsDirectory = resolve(temporaryRoot, "extensions");
 const probeVsix = resolve(temporaryRoot, "logrotate-remote-smoke-probe.vsix");
@@ -39,6 +40,7 @@ let containerStarted = false;
 try {
   await requireFile(vsix);
   await Promise.all([
+    mkdir(resolve(bootstrapUserDataDirectory, "User"), { recursive: true }),
     mkdir(resolve(userDataDirectory, "User"), { recursive: true }),
     mkdir(extensionsDirectory, { recursive: true }),
     rm(artifactDirectory, { recursive: true, force: true }).then(() =>
@@ -98,27 +100,27 @@ try {
   );
   await chmod(sshConfig, 0o600);
   await run("ssh", ["-F", sshConfig, "-o", "BatchMode=yes", "logrotate-ci", "true"]);
-  await writeFile(
-    resolve(userDataDirectory, "User/settings.json"),
-    `${JSON.stringify(
-      {
-        "extensions.autoCheckUpdates": false,
-        "extensions.autoUpdate": false,
-        "remote.SSH.configFile": sshConfig,
-        "remote.SSH.localServerDownload": "always",
-        "remote.SSH.remotePlatform": { "logrotate-ci": "linux" },
-        "remote.SSH.showLoginTerminal": false,
-        "remote.SSH.useExecServer": false,
-        "remote.SSH.useLocalServer": false,
-        "security.workspace.trust.enabled": false,
-        "telemetry.telemetryLevel": "off",
-        "update.mode": "none",
-      },
-      undefined,
-      2,
-    )}\n`,
-    "utf8",
-  );
+  const settings = `${JSON.stringify(
+    {
+      "extensions.autoCheckUpdates": false,
+      "extensions.autoUpdate": false,
+      "remote.SSH.configFile": sshConfig,
+      "remote.SSH.localServerDownload": "always",
+      "remote.SSH.remotePlatform": { "logrotate-ci": "linux" },
+      "remote.SSH.showLoginTerminal": false,
+      "remote.SSH.useExecServer": false,
+      "remote.SSH.useLocalServer": false,
+      "security.workspace.trust.enabled": false,
+      "telemetry.telemetryLevel": "off",
+      "update.mode": "none",
+    },
+    undefined,
+    2,
+  )}\n`;
+  await Promise.all([
+    writeFile(resolve(bootstrapUserDataDirectory, "User/settings.json"), settings, "utf8"),
+    writeFile(resolve(userDataDirectory, "User/settings.json"), settings, "utf8"),
+  ]);
 
   await prepareRemoteWorkspace(container, remoteVsix);
   await packageProbe(probeVsix);
@@ -132,7 +134,7 @@ try {
     vscodeCli,
     [
       "--user-data-dir",
-      userDataDirectory,
+      bootstrapUserDataDirectory,
       "--extensions-dir",
       extensionsDirectory,
       "--install-extension",
@@ -152,7 +154,7 @@ try {
   }
   bootstrapProcess = launchRemoteCode(
     vscodeExecutable,
-    userDataDirectory,
+    bootstrapUserDataDirectory,
     extensionsDirectory,
     "/home/vscode/workspace",
   );
@@ -407,7 +409,10 @@ async function collectFailureEvidence(error) {
           "%M %s %p\\n",
         ])
       : undefined,
-    localLogs: await collectLocalLogs(),
+    localLogs: {
+      bootstrap: await collectLocalLogs(bootstrapUserDataDirectory),
+      smoke: await collectLocalLogs(userDataDirectory),
+    },
     localLogFiles: await capture("find", [
       userDataDirectory,
       "-maxdepth",
@@ -425,8 +430,8 @@ async function collectFailureEvidence(error) {
   process.stderr.write(`${evidence.remoteServerTree ?? ""}\n`);
 }
 
-async function collectLocalLogs() {
-  const logsDirectory = resolve(userDataDirectory, "logs");
+async function collectLocalLogs(profileDirectory) {
+  const logsDirectory = resolve(profileDirectory, "logs");
   const listing = await capture("find", [logsDirectory, "-type", "f", "-print"]);
   const logs = {};
   for (const path of listing?.split(/\r?\n/u) ?? []) {

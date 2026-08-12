@@ -83,6 +83,7 @@ describe("workflow supply-chain policy", () => {
     expect(remoteRunner).toContain('"ssh-remote"');
     expect(remoteRunner).toContain("expectedRemoteExtensionPath");
     expect(remoteRunner).toContain("findRemoteCodeServer");
+    expect(remoteRunner).toContain("bootstrapUserDataDirectory");
     expect(remoteRunner).toContain('"BatchMode=yes"');
     expect(remoteRunner).toContain("300_000");
     expect(remoteRunner).toMatch(/launchRemoteCode\(\s+vscodeExecutable,/u);

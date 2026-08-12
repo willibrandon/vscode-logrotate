@@ -34,7 +34,6 @@ interface TestFile {
 }
 
 interface DiagnosticWaiter {
-  readonly after: number;
   readonly uri: string;
   readonly predicate: (
     diagnostics: readonly Diagnostic[],
@@ -75,9 +74,7 @@ export interface ServerHarness {
       diagnostics: readonly Diagnostic[],
       publication: PublishDiagnosticsParams,
     ) => boolean,
-    after?: number,
   ): Promise<PublishDiagnosticsParams>;
-  diagnosticPublications(): readonly PublishDiagnosticsParams[];
   logMessages(): readonly LogMessageParams[];
   waitForLog(predicate: (message: LogMessageParams) => boolean): Promise<LogMessageParams>;
   loadedIncludeNotifications(): readonly LoadedIncludesParams[];
@@ -106,7 +103,6 @@ export async function createServerHarness(
     new StreamMessageWriter(clientToServer),
   );
   const published = new Map<string, PublishDiagnosticsParams>();
-  const diagnosticPublications: PublishDiagnosticsParams[] = [];
   const waiters: DiagnosticWaiter[] = [];
   const logMessages: LogMessageParams[] = [];
   const logWaiters: LogWaiter[] = [];
@@ -119,15 +115,9 @@ export async function createServerHarness(
     "textDocument/publishDiagnostics",
     (params: PublishDiagnosticsParams): void => {
       published.set(params.uri, params);
-      diagnosticPublications.push(params);
-      const publicationIndex = diagnosticPublications.length - 1;
       for (let index = waiters.length - 1; index >= 0; index -= 1) {
         const waiter = waiters[index];
-        if (
-          waiter?.uri === params.uri &&
-          publicationIndex >= waiter.after &&
-          waiter.predicate(params.diagnostics, params)
-        ) {
+        if (waiter?.uri === params.uri && waiter.predicate(params.diagnostics, params)) {
           waiters.splice(index, 1);
           waiter.resolve(params);
         }
@@ -231,17 +221,13 @@ export async function createServerHarness(
     async close(uri): Promise<void> {
       await client.sendNotification("textDocument/didClose", { textDocument: { uri } });
     },
-    waitForDiagnostics(uri, predicate = () => true, after = 0): Promise<PublishDiagnosticsParams> {
-      const current = diagnosticPublications
-        .slice(after)
-        .find((publication) =>
-          publication.uri === uri ? predicate(publication.diagnostics, publication) : false,
-        );
-      if (current !== undefined) {
+    waitForDiagnostics(uri, predicate = () => true): Promise<PublishDiagnosticsParams> {
+      const current = published.get(uri);
+      if (current !== undefined && predicate(current.diagnostics, current)) {
         return Promise.resolve(current);
       }
       return new Promise((resolvePromise, rejectPromise): void => {
-        const waiter = { after, uri, predicate, resolve: resolvePromise };
+        const waiter = { uri, predicate, resolve: resolvePromise };
         waiters.push(waiter);
         const timeout = setTimeout((): void => {
           const index = waiters.indexOf(waiter);
@@ -250,9 +236,6 @@ export async function createServerHarness(
         }, 2000);
         timeout.unref();
       });
-    },
-    diagnosticPublications(): readonly PublishDiagnosticsParams[] {
-      return diagnosticPublications;
     },
     logMessages(): readonly LogMessageParams[] {
       return logMessages;

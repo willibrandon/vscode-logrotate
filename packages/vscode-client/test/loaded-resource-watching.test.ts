@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   includedResourceChangedNotification,
   loadedIncludesNotification,
-  refreshDiagnosticsNotification,
 } from "@logrotate/language-server/protocol";
 
 const vscodeMock = vi.hoisted(() => {
@@ -228,7 +227,6 @@ describe("loaded include watching", () => {
     const context = { subscriptions };
     const runtime = {
       client,
-      fileUriCaseInsensitive: false,
       output: {
         warn(message: string): void {
           warnings.push(message);
@@ -268,12 +266,6 @@ describe("loaded include watching", () => {
       { uri: first, languageId: "logrotate" },
       { uri: virtual, languageId: "logrotate" },
     ]);
-    await vi.waitFor(() => {
-      expect(client.sent).toEqual([
-        { method: refreshDiagnosticsNotification.method, params: { uri: first } },
-        { method: refreshDiagnosticsNotification.method, params: { uri: virtual } },
-      ]);
-    });
     client.sent.length = 0;
     expect(vscodeMock.watchers).toHaveLength(3);
     const firstWatcher = vscodeMock.watchers[0];
@@ -378,35 +370,5 @@ describe("loaded include watching", () => {
     });
     expect(vscodeMock.watchers).toHaveLength(5);
     expect(warnings).toEqual(["Unable to watch included resource: watcher creation rejected"]);
-  });
-
-  it("matches differently cased Windows file URIs before assigning the language", async () => {
-    const { registerLoadedIncludeSupport } = await import("../src/common.js");
-    const client = new FakeLanguageClient();
-    const subscriptions: { dispose(): void }[] = [];
-    const context = { subscriptions };
-    const runtime = {
-      client,
-      fileUriCaseInsensitive: true,
-      output: { warn: vi.fn(), error: vi.fn() },
-    };
-    const document = vscodeMock.openDocument("file:///D:/SRC/Config/INCLUDED.conf", "properties");
-
-    registerLoadedIncludeSupport(context as never, runtime as never);
-    client.receive(loadedIncludesNotification, {
-      rootUri: "file:///d:/src/config/logrotate.conf",
-      resources: [{ uri: "file:///d:/src/config/included.conf", type: "file" }],
-    });
-
-    await vi.waitFor(() => {
-      expect(document.languageId).toBe("logrotate");
-      expect(client.sent).toEqual([
-        {
-          method: refreshDiagnosticsNotification.method,
-          params: { uri: "file:///D:/SRC/Config/INCLUDED.conf" },
-        },
-      ]);
-    });
-    for (const subscription of subscriptions) subscription.dispose();
   });
 });

@@ -69,7 +69,7 @@ describe("common extension commands", () => {
   });
 
   it("restarts the server in order and shows its output without stealing focus", async () => {
-    const { clientOptions, registerCommonCommands } = await import("../src/common.js");
+    const { registerCommonCommands } = await import("../src/common.js");
     const lifecycle: string[] = [];
     const client = {
       stop: vi.fn(async (): Promise<void> => {
@@ -99,12 +99,22 @@ describe("common extension commands", () => {
       ["Logrotate language server restarted."],
     ]);
     expect(output.show).toHaveBeenCalledWith(true);
-    expect(clientOptions(output as never)).toEqual({
-      documentSelector: [{ language: "logrotate" }, { language: "logrotate-state" }],
-      outputChannel: output,
-      markdown: { isTrusted: false },
-      synchronize: { configurationSection: "logrotate" },
-    });
+  });
+
+  it("forwards the visible file document and suppresses its Git history document", async () => {
+    const { clientOptions } = await import("../src/common.js");
+    const next = vi.fn((): Promise<void> => Promise.resolve());
+    const didOpen = clientOptions({} as never).middleware?.didOpen;
+    expect(didOpen).toBeTypeOf("function");
+
+    const visibleDocument = { uri: { scheme: "file" } };
+    const historyDocument = { uri: { scheme: "git" } };
+    await didOpen?.(historyDocument as never, next);
+    expect(next).not.toHaveBeenCalled();
+
+    await didOpen?.(visibleDocument as never, next);
+    expect(next).toHaveBeenCalledOnce();
+    expect(next).toHaveBeenCalledWith(visibleDocument);
   });
 
   it("opens only reviewed upstream documentation targets", async () => {

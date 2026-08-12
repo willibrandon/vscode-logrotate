@@ -5,6 +5,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-12
+
+### Fixed
+
+- Diagnostics stay attached to the visible file when VS Code also opens its Git history document, so
+  an unknown directive is underlined immediately without navigating away.
+
 ## [0.1.8] - 2026-08-12
 
 ### Fixed
@@ -89,7 +96,8 @@ creation.
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/willibrandon/vscode-logrotate/releases/tag/v0.1.6

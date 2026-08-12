@@ -6,10 +6,10 @@ import { detectedTargetVersionNotification } from "@logrotate/language-server/pr
 import {
   clientOptions,
   registerCommonCommands,
-  registerContentDetection,
   registerFileSystemBridge,
   registerLoadedIncludeSupport,
 } from "./common.js";
+import { registerContentDetection } from "./content-detection.js";
 import {
   canDetectTargetVersion,
   explainUnavailability,
@@ -38,7 +38,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const languageClient = client;
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
-  registerContentDetection(context, { client, output });
+  registerContentDetection(context, { output });
   registerFileSystemBridge(context, { client, output });
   registerLoadedIncludeSupport(context, {
     client,

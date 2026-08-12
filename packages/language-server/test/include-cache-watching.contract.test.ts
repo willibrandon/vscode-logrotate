@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  includedResourceChangedNotification,
-  refreshDiagnosticsNotification,
-} from "../src/protocol.js";
+import { includedResourceChangedNotification } from "../src/protocol.js";
 import { createServerHarness } from "./harness.js";
 import type { ServerHarness } from "./harness.js";
-import type { TimerHost } from "../src/server.js";
 
 describe("include cache and loaded-resource server contract", () => {
   let harness: ServerHarness | undefined;
@@ -134,74 +130,6 @@ describe("include cache and loaded-resource server contract", () => {
       ),
     ).toMatchObject({ uri: sharedUri });
     expect(harness.fileReadCount(sharedUri)).toBe(2);
-  });
-
-  it("republishes an included diagnostic for the open document version and exact token range", async () => {
-    const rootUri = "file:///workspace/root.conf";
-    const includedUri = "file:///workspace/included.conf";
-    const includedText = "/var/log/included.log {\n    rotote 2\n}\n";
-    const delays: number[] = [];
-    const timers: TimerHost = {
-      setTimeout(callback, milliseconds): ReturnType<typeof setTimeout> {
-        delays.push(milliseconds);
-        return setTimeout(callback, 1);
-      },
-      clearTimeout(handle): void {
-        clearTimeout(handle as ReturnType<typeof setTimeout>);
-      },
-    };
-    harness = await createServerHarness(
-      {
-        [includedUri]: { text: includedText, size: includedText.length, mtime: 1 },
-      },
-      timers,
-    );
-    await harness.open(rootUri, "logrotate", "include included.conf\n");
-    const closedPublication = await harness.waitForDiagnostics(
-      includedUri,
-      (diagnostics, publication) =>
-        publication.version === undefined && diagnostics.some(({ code }) => code === "LR1001"),
-    );
-    expect(closedPublication.version).toBeUndefined();
-
-    const delaysBeforeOpen = delays.length;
-    await harness.open(includedUri, "logrotate", includedText);
-    const openedPublication = await harness.waitForDiagnostics(
-      includedUri,
-      (diagnostics, publication) =>
-        publication.version === 1 && diagnostics.some(({ code }) => code === "LR1001"),
-    );
-    expect(openedPublication.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: "LR1001",
-        severity: 1,
-        range: {
-          start: { line: 1, character: 4 },
-          end: { line: 1, character: 10 },
-        },
-      }),
-    );
-    const openDelays = delays.slice(delaysBeforeOpen);
-    expect(openDelays.every((delay) => delay === 150)).toBe(true);
-
-    const afterRefresh = harness.diagnosticPublications().length;
-    await harness.client.sendNotification(refreshDiagnosticsNotification, { uri: includedUri });
-    const refreshedPublication = await harness.waitForDiagnostics(
-      includedUri,
-      (diagnostics, publication) =>
-        publication.version === 1 && diagnostics.some(({ code }) => code === "LR1001"),
-      afterRefresh,
-    );
-    expect(refreshedPublication.diagnostics).toContainEqual(
-      expect.objectContaining({
-        code: "LR1001",
-        range: {
-          start: { line: 1, character: 4 },
-          end: { line: 1, character: 10 },
-        },
-      }),
-    );
-    expect(delays.at(-1)).toBe(150);
   });
 
   it("refreshes a root when a child of its loaded include directory changes", async () => {

@@ -1,4 +1,5 @@
 import { readFile, readdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
@@ -32,6 +33,18 @@ function workflow(name: string): string {
   const contents = workflows.get(name);
   if (contents === undefined) throw new Error(`Missing workflow ${name}`);
   return contents;
+}
+
+function resolveBashExecutable(): string {
+  if (process.platform !== "win32") return "bash";
+
+  const gitExecPath = spawnSync("git", ["--exec-path"], { encoding: "utf8" });
+  const gitExecDirectory = gitExecPath.stdout.trim();
+  const gitBash = resolve(gitExecDirectory, "../../..", "bin/bash.exe");
+  if (gitExecPath.status !== 0 || gitExecDirectory === "" || !existsSync(gitBash)) {
+    throw new Error("Unable to locate Git for Windows Bash for release workflow validation.");
+  }
+  return gitBash;
 }
 
 describe("workflow supply-chain policy", () => {
@@ -81,6 +94,11 @@ describe("workflow supply-chain policy", () => {
     const remoteRunner = await readFile(resolve(root, "scripts/run-remote-ssh-smoke.mjs"), "utf8");
     expect(ci).toContain("os: [ubuntu-latest, macos-latest, windows-latest]");
     expect(ci).toContain("vscode: [1.102.0, stable]");
+    expect(ci).toContain("Verify native Windows unit and policy behavior");
+    expect(ci).toContain("matrix.os == 'windows-latest' && matrix.vscode == 'stable'");
+    expect(ci).toMatch(
+      /npm exec -- vitest run test\/policy\/workflow-security\.test\.ts\s+packages\/vscode-client\/test\/external-validator\.test\.ts/u,
+    );
     expect(ci).toContain("npm run test:web");
     expect(ci).toContain("npm run test:vsix");
     expect(ci).toContain("dist/test/desktop/extension.test.cjs");
@@ -147,8 +165,9 @@ describe("workflow supply-chain policy", () => {
       ) ?? [];
 
     expect(shellSteps.length).toBeGreaterThan(0);
+    const bash = resolveBashExecutable();
     for (const step of shellSteps) {
-      const shellCheck = spawnSync("bash", ["-n"], { input: step.run, encoding: "utf8" });
+      const shellCheck = spawnSync(bash, ["-n", "-"], { input: step.run, encoding: "utf8" });
       expect(shellCheck.status, `${String(step.name)}: ${shellCheck.stderr}`).toBe(0);
     }
   });

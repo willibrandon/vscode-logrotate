@@ -98,6 +98,11 @@ jobs:
         with:
           node-version: 24.19.0
       - run: npm ci
+      - name: Verify native Windows unit and policy behavior
+        if: matrix.os == 'windows-latest' && matrix.vscode == 'stable'
+        run: >-
+          npm exec -- vitest run test/policy/workflow-security.test.ts
+          packages/vscode-client/test/external-validator.test.ts
       - run: npm run test:integration
         env:
           VSCODE_VERSION: ${{ matrix.vscode }}

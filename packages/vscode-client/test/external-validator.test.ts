@@ -17,6 +17,7 @@ const success: ProcessResult = {
   truncated: false,
   cancelled: false,
 };
+const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
 
 describe("installed logrotate validator", () => {
   it("detects a version with one bounded no-shell probe and rechecks trust", async () => {
@@ -75,7 +76,7 @@ describe("installed logrotate validator", () => {
     expect(run).toHaveBeenNthCalledWith(
       2,
       "/opt/logrotate",
-      ["--debug", "--state", "/dev/null", "/workspace/config/logrotate.conf"],
+      ["--debug", "--state", nullDevice, "/workspace/config/logrotate.conf"],
       expect.any(Object),
       { cwd: "/workspace/config" },
     );

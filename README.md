@@ -3,7 +3,7 @@
 Language support for [logrotate](https://github.com/logrotate/logrotate) configuration and state
 files in Visual Studio Code desktop, remote, and web extension hosts.
 
-**Version 0.1.8 is an early public pre-release.** The language model is currently pinned to
+**Version 0.1.9 is an early public pre-release.** The language model is currently pinned to
 logrotate `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later reviewed syntax).
 
 ## Features
@@ -171,7 +171,6 @@ npm test
 npm run test:grammar
 npm run test:lsp
 npm run test:integration
-npm run test:decoration
 npm run test:web
 npm run test:vsix
 npm run test:remote
@@ -180,16 +179,14 @@ npm run build
 npm run package
 ```
 
-`npm run test:decoration` opens `included.conf` directly in a fresh desktop workbench, forces a
-competing `.conf` language association, and verifies that content detection restores Logrotate and
-renders the LR1001 error squiggle without navigation. `npm run test:web` downloads and starts the VS
-Code web test host. VS Code may print transient filesystem-provider and built-in extension warnings
-during startup; a successful run ends with `VS Code web extension tests passed.` `npm run test:vsix`
-is self-contained: it builds the VSIX, verifies its checksum, installs it into clean desktop and
-browser hosts, and runs both smoke tests. `npm run test:remote` also builds the VSIX, then runs VS
-Code locally against an ephemeral Linux container over SSH. Native Windows works with Docker Desktop
-in Linux containers mode; `docker info --format "{{.OSType}}"` must print `linux`. The command also
-requires `ssh` and `ssh-keygen` on PATH.
+`npm run test:web` downloads and starts the VS Code web test host. VS Code may print transient
+filesystem-provider and built-in extension warnings during startup; a successful run ends with
+`VS Code web extension tests passed.` `npm run test:vsix` is self-contained: it builds the VSIX,
+verifies its checksum, installs it into clean desktop and browser hosts, and runs both smoke tests.
+`npm run test:remote` also builds the VSIX, then runs VS Code locally against an ephemeral Linux
+container over SSH. Native Windows works with Docker Desktop in Linux containers mode;
+`docker info --format "{{.OSType}}"` must print `linux`. The command also requires `ssh` and
+`ssh-keygen` on PATH.
 
 The repository uses native TypeScript 7 for compilation. TypeScript 6 is installed only as the
 compatibility API consumed by typed ESLint while TypeScript 7.0 has no programmatic compiler API.
@@ -214,7 +211,7 @@ The complete product and technical rationale is in [docs/design.md](docs/design.
 
 ## Status and contributing
 
-Version 0.1.8 continues the public pre-release period before stable 1.0. Contributions should
+Version 0.1.9 continues the public pre-release period before stable 1.0. Contributions should
 preserve browser/desktop parity, lossless script bodies, conservative diagnostics, bounded resource
 use, and generated language-data consistency. See [CONTRIBUTING.md](CONTRIBUTING.md),
 [SECURITY.md](SECURITY.md), and the [release checklist](docs/release-checklist.md).

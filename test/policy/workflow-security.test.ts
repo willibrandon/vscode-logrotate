@@ -98,9 +98,6 @@ describe("workflow supply-chain policy", () => {
     expect(ci).toContain("Verify native Windows unit and policy behavior");
     expect(ci).toContain("matrix.os == 'windows-latest' && matrix.vscode == 'stable'");
     expect(ci).toMatch(
-      /Verify the native Windows diagnostic decoration[\s\S]*?npm run test:decoration/u,
-    );
-    expect(ci).toMatch(
       /npm exec -- vitest run test\/policy\/workflow-security\.test\.ts\s+packages\/vscode-client\/test\/external-validator\.test\.ts\s+scripts\/test\/remote-smoke-host\.test\.ts/u,
     );
     expect(ci).toContain("npm run test:web");

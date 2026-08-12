@@ -3,10 +3,10 @@ import { LanguageClient } from "vscode-languageclient/browser";
 import {
   clientOptions,
   registerCommonCommands,
-  registerContentDetection,
   registerFileSystemBridge,
   registerLoadedIncludeSupport,
 } from "./common.js";
+import { registerContentDetection } from "./content-detection.js";
 import { explainUnavailability } from "./external-validation-policy.js";
 
 let client: LanguageClient | undefined;
@@ -26,7 +26,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   context.subscriptions.push(output, client);
   registerCommonCommands(context, { client, output });
-  registerContentDetection(context, { client, output });
+  registerContentDetection(context, { output });
   registerFileSystemBridge(context, { client, output });
   registerLoadedIncludeSupport(context, { client, fileUriCaseInsensitive: false, output });
   context.subscriptions.push(

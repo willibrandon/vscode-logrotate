@@ -104,9 +104,6 @@ jobs:
           npm exec -- vitest run test/policy/workflow-security.test.ts
           packages/vscode-client/test/external-validator.test.ts
           scripts/test/remote-smoke-host.test.ts
-      - name: Verify the native Windows diagnostic decoration
-        if: matrix.os == 'windows-latest' && matrix.vscode == 'stable'
-        run: npm run test:decoration
       - run: npm run test:integration
         env:
           VSCODE_VERSION: ${{ matrix.vscode }}

@@ -61,11 +61,11 @@ describe("workflow supply-chain policy", () => {
     }
   });
 
-  it("starts read-only and confines publishing permissions to the protected release job", () => {
+  it("starts read-only and confines publishing permissions to protected deployment jobs", () => {
     for (const [name, contents] of workflows) {
       expect(contents, name).toMatch(/^permissions:\n {2}contents: read$/mu);
       expect(contents, name).not.toContain("pull_request_target:");
-      if (name !== "release.yml") {
+      if (name !== "release.yml" && name !== "docs.yml") {
         expect(contents, name).not.toContain("contents: write");
         expect(contents, name).not.toContain("id-token: write");
         expect(contents, name).not.toContain("attestations: write");
@@ -77,6 +77,27 @@ describe("workflow supply-chain policy", () => {
     expect(release).toContain("attestations: write");
     expect(release).toContain("contents: write");
     expect(release).toContain("id-token: write");
+
+    const docs = workflow("docs.yml");
+    expect(docs).toContain("environment:\n      name: github-pages");
+    expect(docs).toContain("pages: write");
+    expect(docs).toContain("id-token: write");
+    expect(docs).not.toContain("contents: write");
+    expect(docs).not.toContain("attestations: write");
+  });
+
+  it("builds documentation for pull requests and deploys only from main", () => {
+    const docs = workflow("docs.yml");
+
+    expect(docs).toMatch(/pull_request:[\s\S]*push:\n {4}branches:\n {6}- main/u);
+    expect(docs).toContain("uses: withastro/action@");
+    expect(docs).toContain("path: docs-site");
+    expect(docs).toContain("node-version: 24.19.0");
+    expect(docs).toContain("package-manager: npm@11.17.0");
+    expect(docs).toContain(
+      "if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}",
+    );
+    expect(docs).toContain("uses: actions/deploy-pages@");
   });
 
   it("disables persisted checkout credentials everywhere", () => {

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://willibrandon.github.io/vscode-logrotate/sitemap-index.xml

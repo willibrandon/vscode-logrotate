@@ -2,6 +2,8 @@ dist
 node_modules
 .upstream
 .logrotate-3.22
+docs-site/.astro
+.playwright-cli
 package-lock.json
 syntaxes/*.json
 snippets/*.json

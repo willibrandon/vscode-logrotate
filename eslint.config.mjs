@@ -5,6 +5,8 @@ export default tseslint.config(
   {
     ignores: [
       "dist/**",
+      "docs-site/.astro/**",
+      "docs-site/dist/**",
       "node_modules/**",
       ".vscode-test/**",
       ".vscode-test-web/**",

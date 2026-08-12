@@ -6,6 +6,8 @@ coverage/
 .upstream/
 .logrotate-3.22/
 .eslintcache
+.astro/
+.playwright-cli/
 *.tsbuildinfo
 packages/*/lib/
 test-results/

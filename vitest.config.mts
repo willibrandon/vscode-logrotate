@@ -5,8 +5,8 @@ const config: ViteUserConfig = defineConfig({
     environment: "node",
     include: ["**/*.test.ts"],
     exclude: [
-      "node_modules/**",
-      "dist/**",
+      "**/node_modules/**",
+      "**/dist/**",
       "test/integration/**",
       "test/performance/**",
       "test/web/**",

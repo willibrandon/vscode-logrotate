@@ -16,7 +16,7 @@
   "bugs": {
     "url": "https://github.com/willibrandon/vscode-logrotate/issues"
   },
-  "homepage": "https://github.com/willibrandon/vscode-logrotate#readme",
+  "homepage": "https://willibrandon.github.io/vscode-logrotate/",
   "icon": "media/icon.png",
   "categories": [
     "Programming Languages",

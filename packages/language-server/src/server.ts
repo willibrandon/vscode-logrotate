@@ -79,6 +79,7 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
   const documents = new TextDocuments(TextDocument);
   let settings: ServerSettings = defaultSettings;
   const pendingDiagnostics = new Map<string, unknown>();
+  const diagnosticJobs = new Set<Promise<void>>();
   const loadedIncludes = new Map<string, ReadonlySet<string>>();
   const fileSystem = connectionFileSystem(connection, documents);
 
@@ -95,14 +96,18 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     const handle = timers.setTimeout((): void => {
       pendingDiagnostics.delete(document.uri);
       if (documents.get(document.uri)?.version !== version) return;
-      void publishDiagnostics(
+      const job = publishDiagnostics(
         connection,
         documents,
         document,
         settings,
         fileSystem,
         loadedIncludes,
-      );
+      ).catch((): void => undefined);
+      diagnosticJobs.add(job);
+      void job.finally((): void => {
+        diagnosticJobs.delete(job);
+      });
     }, 150);
     pendingDiagnostics.set(document.uri, handle);
   };
@@ -153,9 +158,10 @@ export function startLanguageServer(connection: Connection, timers: TimerHost): 
     void connection.sendDiagnostics({ uri: document.uri, diagnostics: [] });
   });
 
-  connection.onShutdown((): void => {
+  connection.onShutdown(async (): Promise<void> => {
     for (const pending of pendingDiagnostics.values()) timers.clearTimeout(pending);
     pendingDiagnostics.clear();
+    await Promise.allSettled(diagnosticJobs);
   });
 
   connection.onCompletion(async (params, token): Promise<CompletionItem[]> => {

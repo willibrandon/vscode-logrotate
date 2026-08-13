@@ -23,7 +23,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Scan for secrets
-        uses: willibrandon/picket@1de477c8c07e395088d9a2a771535b1432f3941b # v0.2.9
+        uses: willibrandon/picket@c1d93d64c725d0a6296b151537b3469db92be5ac # nested actions pinned
         with:
           cache-mode: secret-hash-only
           fail-on: findings

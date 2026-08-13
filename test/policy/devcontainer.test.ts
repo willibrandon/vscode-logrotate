@@ -185,8 +185,8 @@ describe("development container policy", () => {
 
     expect(document.errors).toEqual([]);
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/mu);
-    expect(workflow).toContain("uses: devcontainers/ci@00115d9fb3fc4a15dc9b460cce0af467b77dbe21");
-    expect(ci).toContain("uses: willibrandon/picket@1de477c8c07e395088d9a2a771535b1432f3941b");
+    expect(workflow).toContain("uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca");
+    expect(ci).toContain("uses: willibrandon/picket@c1d93d64c725d0a6296b151537b3469db92be5ac");
     expect(ci).toContain("cache-mode: secret-hash-only");
     expect(ci).toContain("fail-on: findings");
     expect(ci).toContain("redact: 100");

@@ -10,6 +10,11 @@ interface ExtensionManifest {
   readonly version: string;
 }
 
+interface SyntaxToken {
+  readonly c: string;
+  readonly t: string;
+}
+
 suite("Logrotate desktop extension", () => {
   test("activates the Node client and starts the language server", async () => {
     const extension = vscode.extensions.getExtension(extensionId);
@@ -96,6 +101,17 @@ suite("Logrotate desktop extension", () => {
   });
 
   test("toggles configuration comments at indentation boundaries and leaves embedded shell to its language", async () => {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(folder, "the integration workspace was not opened");
+    const tokens = await vscode.commands.executeCommand<readonly SyntaxToken[] | undefined>(
+      "_workbench.captureSyntaxTokens",
+      vscode.Uri.joinPath(folder.uri, "theme-preview.logrotate"),
+    );
+    assert.ok(
+      tokens?.some(({ t }) => t.includes("meta.embedded.block.shell source.shell")),
+      "the logrotate grammar did not tokenize its embedded shell block",
+    );
+
     const source = [
       "/var/log/application.log {",
       "  daily",
@@ -119,7 +135,8 @@ suite("Logrotate desktop extension", () => {
       return new vscode.Selection(position, position);
     });
 
-    await toggleCommentsAfterEmbeddedLanguagesLoad(editor, document, selections, source, 4);
+    editor.selections = selections;
+    await executeAndWaitForDocumentChange("editor.action.commentLine", document);
 
     assert.equal(document.lineAt(0).text, "# /var/log/application.log {");
     assert.equal(document.lineAt(1).text, "  # daily");
@@ -131,26 +148,6 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.getText(), source);
   });
 });
-
-async function toggleCommentsAfterEmbeddedLanguagesLoad(
-  editor: vscode.TextEditor,
-  document: vscode.TextDocument,
-  selections: readonly vscode.Selection[],
-  source: string,
-  embeddedLine: number,
-): Promise<void> {
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
-    editor.selections = [...selections];
-    await executeAndWaitForDocumentChange("editor.action.commentLine", document);
-    if (document.lineAt(embeddedLine).text === "    echo rotated") return;
-
-    await executeAndWaitForDocumentChange("undo", document);
-    assert.equal(document.getText(), source);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  assert.fail("embedded shell language did not become available to the comment command");
-}
 
 async function executeAndWaitForDocumentChange(
   command: string,

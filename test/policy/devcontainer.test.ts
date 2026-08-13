@@ -177,9 +177,10 @@ describe("development container policy", () => {
   });
 
   it("builds and scans the container without forwarding runner secrets", async () => {
-    const [workflow, ci] = await Promise.all([
+    const [workflow, ci, installPicket] = await Promise.all([
       readFile(resolve(root, ".github/workflows/devcontainer.yml"), "utf8"),
       readFile(resolve(root, ".github/workflows/ci.yml"), "utf8"),
+      readFile(resolve(root, ".github/scripts/install-picket.sh"), "utf8"),
     ]);
     const document = parseDocument(workflow);
 
@@ -187,6 +188,10 @@ describe("development container policy", () => {
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/mu);
     expect(workflow).toContain("uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca");
     expect(ci).toContain("uses: willibrandon/picket@d1564c079c5b180e86a8bc38fb4779e7a817388a");
+    expect(installPicket).toContain('readonly version="0.2.10"');
+    expect(installPicket).toContain(
+      'readonly expected_sha256="6936c339b71ac5eba5cb45dd4149038467e80c3cf5a860add3b23cae26793336"',
+    );
     expect(ci).toContain("cache-mode: secret-hash-only");
     expect(ci).toContain("fail-on: findings");
     expect(ci).toContain("redact: 100");

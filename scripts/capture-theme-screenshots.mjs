@@ -4,7 +4,9 @@ import { open } from "@vscode/test-web";
 import { chromium } from "playwright";
 
 const root = resolve(import.meta.dirname, "..");
-const outputDirectory = resolve(root, "docs/images");
+const outputDirectory = resolve(
+  process.env.LOGROTATE_THEME_OUTPUT_DIR ?? resolve(root, "docs/images"),
+);
 const debuggingPort = 9333;
 const captureWidth = 1_000;
 const captureHeight = 310;
@@ -36,7 +38,7 @@ const testWeb = await open({
   folderPath: resolve(root, "test/fixtures/workspace"),
   headless: true,
   quality: "stable",
-  testRunnerDataDir: resolve(root, ".vscode-test-web"),
+  testRunnerDataDir: resolve(root, ".vscode-test-web/runtime"),
 });
 
 let browser;

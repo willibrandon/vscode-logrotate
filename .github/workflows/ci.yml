@@ -13,6 +13,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan for secrets
+        uses: willibrandon/picket@1de477c8c07e395088d9a2a771535b1432f3941b # v0.2.9
+        with:
+          cache-mode: secret-hash-only
+          fail-on: findings
+          redact: 100
+          timeout: 300
+
   quality:
     name: Quality and bundles
     runs-on: ubuntu-latest

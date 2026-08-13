@@ -37,24 +37,16 @@ await createVSIX({
   githubBranch: sourceRevision,
   preRelease,
 });
-await execute(
+const npmCli = process.env.npm_execpath;
+if (npmCli === undefined || npmCli.length === 0) {
+  throw new Error("The release artifact build must run through npm.");
+}
+const { stdout: generatedSbomText } = await execute(
   process.execPath,
-  [
-    resolve(root, "node_modules/@cyclonedx/cyclonedx-npm/bin/cyclonedx-npm-cli.js"),
-    "--package-lock-only",
-    "--omit",
-    "dev",
-    "--output-reproducible",
-    "--validate",
-    "--output-format",
-    "JSON",
-    "--output-file",
-    sbom,
-    resolve(root, "package.json"),
-  ],
-  { cwd: root },
+  [npmCli, "sbom", "--package-lock-only", "--omit", "dev", "--sbom-format", "cyclonedx"],
+  { cwd: root, maxBuffer: 8 * 1024 * 1024 },
 );
-const generatedSbom = JSON.parse(await readFile(sbom, "utf8"));
+const generatedSbom = JSON.parse(generatedSbomText);
 const attestableSbom = prepareCycloneDxForAttestation(
   generatedSbom,
   `${manifest.publisher}.${manifest.name}@${manifest.version}:${sourceRevision}`,

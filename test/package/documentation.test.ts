@@ -13,6 +13,7 @@ const requiredDocuments = [
   "THIRD-PARTY-NOTICES.md",
   "docs/architecture.md",
   "docs/directives.md",
+  "docs/development-container.md",
   "docs/grammar.md",
   "docs/performance.md",
   "docs/remote-smoke.md",

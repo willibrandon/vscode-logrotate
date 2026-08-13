@@ -26,7 +26,7 @@ const config: ViteUserConfig = defineConfig({
       ],
       exclude: ["packages/language-core/src/generated/**"],
       reporter: ["text", "json-summary", "lcov"],
-      reportsDirectory: "coverage",
+      reportsDirectory: "coverage/report",
       thresholds: {
         perFile: true,
         branches: 80,

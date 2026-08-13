@@ -29,7 +29,7 @@
     "linux",
     "language-server"
   ],
-  "packageManager": "npm@11.17.0",
+  "packageManager": "npm@12.0.2",
   "workspaces": [
     "packages/*"
   ],
@@ -278,7 +278,6 @@
     "verify": "npm run check:generated && npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run test:performance && npm run build && npm run check:bundles && npm run check:licenses && npm run check:package && npm run test:package && npm run audit && npm run audit:signatures"
   },
   "devDependencies": {
-    "@cyclonedx/cyclonedx-npm": "6.0.1",
     "@eslint/js": "10.0.1",
     "@types/mocha": "10.0.10",
     "@types/node": "24.13.3",
@@ -312,7 +311,10 @@
     "vscode-uri": "3.1.0"
   },
   "overrides": {
+    "cheerio": "1.0.0-rc.12",
     "diff": "8.0.3",
+    "glob": "13.0.6",
+    "keytar": "npm:@github/keytar@7.10.6",
     "serialize-javascript": "7.1.0"
   },
   "files": [
@@ -336,7 +338,6 @@
     "@playwright/browser-chromium@1.62.1": true,
     "@vscode/vsce-sign@2.0.9": true,
     "esbuild@0.28.2": true,
-    "keytar@7.9.0": true,
-    "libxmljs2@0.37.0": true
+    "@github/keytar@7.10.6": true
   }
 }

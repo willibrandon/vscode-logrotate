@@ -5,15 +5,24 @@ private channel described in [SECURITY.md](SECURITY.md), not a public issue.
 
 ## Development setup
 
-Use Node.js 24 LTS and the npm version pinned by `packageManager`. On Debian, the host integration
-tools are available as system packages:
+The recommended setup is the repository's reproducible development container. Start Docker, open the
+repository in Visual Studio Code, and run **Dev Containers: Rebuild and Reopen in Container**. The
+container already provides the pinned Node.js and npm versions; do not run `nvm` inside it. Run
+`npm run verify` while iterating and `bash .devcontainer/verify.sh` before submitting a change.
+Dependencies and generated output stay on container-managed volumes, so Linux and Windows worktrees
+do not overwrite one another. See [docs/development-container.md](docs/development-container.md) for
+CLI usage and the Docker socket security boundary.
+
+For development directly on the host, use Node.js 24 LTS and the npm version pinned by
+`packageManager`. On Debian, the host integration tools are available as system packages:
 
 ```sh
 sudo apt-get update
-sudo apt-get install --yes chromium logrotate xvfb
+sudo apt-get install --yes chromium logrotate python3-venv xvfb
 nvm install
 nvm use
 npm ci
+npm --prefix docs-site ci
 npm run verify
 ```
 

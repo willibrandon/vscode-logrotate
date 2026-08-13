@@ -74,7 +74,7 @@ try {
     folderPath: resolve(root, "test/fixtures/workspace"),
     headless: true,
     quality: version === "insiders" ? "insiders" : "stable",
-    testRunnerDataDir: resolve(root, ".vscode-test-web"),
+    testRunnerDataDir: resolve(root, ".vscode-test-web/runtime"),
   });
   console.log(
     `Installed and activated ${expectedIdentity} from the local VSIX in clean desktop and browser hosts.`,

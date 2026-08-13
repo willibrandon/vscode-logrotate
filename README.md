@@ -140,23 +140,52 @@ after an explicit user action.
 
 ## Development
 
-Requirements:
+### Development container
+
+The [development container](docs/development-container.md) is the recommended setup. On the host,
+install Docker with a Linux container engine, Visual Studio Code, and the current Dev Containers
+extension. Run **Dev Containers: Rebuild and Reopen in Container**. Container creation installs both
+npm lockfiles and prepares the pinned logrotate source corpus.
+
+Run these commands in the container:
+
+```sh
+node --version
+npm --version
+npm ci
+npm run verify
+```
+
+The first two commands must report `v24.19.0` and `12.0.2`. Run the complete container check before
+submitting a change:
+
+```sh
+bash .devcontainer/verify.sh
+```
+
+It validates every required tool and runs the upstream, installed-logrotate, unit, coverage,
+performance, desktop, web, packaged VSIX, Remote SSH, theme, and documentation checks.
+
+### Host setup
+
+Development without the container requires:
 
 - Node.js 24 LTS
-- npm 11 (the exact package manager version is recorded in `package.json`)
+- npm 12 (the exact package manager version is recorded in `package.json`)
 - Git for Windows, including Git Bash, when developing on native Windows
 - Chromium and Xvfb for web and headless desktop integration tests on Linux
-- logrotate 3.22 or later for optional differential and installed-tool tests
+- logrotate 3.22 for installed-tool tests
 - Docker and OpenSSH for the isolated Remote SSH smoke test
 
 ```sh
+nvm install
 nvm use
 npm ci
 npm run verify
 ```
 
 On native Windows, `npm config get os` must print `null`. If it prints `linux`, remove the stale
-override and reinstall the platform-specific optional packages from the committed lockfile:
+override and reinstall the platform-specific packages from the committed lockfile:
 
 ```cmd
 npm config delete os --location=user

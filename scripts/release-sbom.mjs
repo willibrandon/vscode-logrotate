@@ -20,5 +20,11 @@ export function prepareCycloneDxForAttestation(value, seed) {
     digest.slice(20, 32),
   ].join("-");
 
-  return { ...value, serialNumber: `urn:uuid:${uuid}` };
+  const metadata =
+    typeof value.metadata === "object" && value.metadata !== null && !Array.isArray(value.metadata)
+      ? { ...value.metadata }
+      : undefined;
+  if (metadata !== undefined) delete metadata.timestamp;
+
+  return { ...value, metadata, serialNumber: `urn:uuid:${uuid}` };
 }

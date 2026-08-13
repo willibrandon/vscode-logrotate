@@ -187,10 +187,10 @@ describe("development container policy", () => {
     expect(document.errors).toEqual([]);
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/mu);
     expect(workflow).toContain("uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca");
-    expect(ci).toContain("uses: willibrandon/picket@d1564c079c5b180e86a8bc38fb4779e7a817388a");
-    expect(installPicket).toContain('readonly version="0.2.10"');
+    expect(ci).toContain("uses: willibrandon/picket@cb6cbae0f5c9d35e75642e9ded88a3edaa8d12c8");
+    expect(installPicket).toContain('readonly version="0.2.11"');
     expect(installPicket).toContain(
-      'readonly expected_sha256="6936c339b71ac5eba5cb45dd4149038467e80c3cf5a860add3b23cae26793336"',
+      'readonly expected_sha256="c1d694a56c2eb7844b0145ac31696952c7cf31198ff26b7cf50eb2a3131c3b54"',
     );
     expect(ci).toContain("cache-mode: secret-hash-only");
     expect(ci).toContain("fail-on: findings");

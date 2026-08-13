@@ -3,9 +3,9 @@
 set -euo pipefail
 
 readonly install_directory="${1:?usage: install-picket.sh <install-directory>}"
-readonly version="0.2.10"
+readonly version="0.2.11"
 readonly archive="picket-v${version}-linux-x64.tar.gz"
-readonly expected_sha256="6936c339b71ac5eba5cb45dd4149038467e80c3cf5a860add3b23cae26793336"
+readonly expected_sha256="c1d694a56c2eb7844b0145ac31696952c7cf31198ff26b7cf50eb2a3131c3b54"
 readonly download_url="https://github.com/willibrandon/picket/releases/download/v${version}/${archive}"
 
 mkdir -p "$install_directory"

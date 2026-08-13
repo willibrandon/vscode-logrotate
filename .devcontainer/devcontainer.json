@@ -1,0 +1,118 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "vscode-logrotate (${devcontainerId})",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "mounts": [
+    {
+      "source": "/var/run/docker.sock",
+      "target": "/var/run/docker-host.sock",
+      "type": "bind"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-node-modules",
+      "target": "${containerWorkspaceFolder}/node_modules",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-dist",
+      "target": "${containerWorkspaceFolder}/dist",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-coverage",
+      "target": "${containerWorkspaceFolder}/coverage",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-vscode-test",
+      "target": "${containerWorkspaceFolder}/.vscode-test",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-vscode-test-web",
+      "target": "${containerWorkspaceFolder}/.vscode-test-web",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-language-core-lib",
+      "target": "${containerWorkspaceFolder}/packages/language-core/lib",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-language-server-lib",
+      "target": "${containerWorkspaceFolder}/packages/language-server/lib",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-vscode-client-lib",
+      "target": "${containerWorkspaceFolder}/packages/vscode-client/lib",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-docs-node-modules",
+      "target": "${containerWorkspaceFolder}/docs-site/node_modules",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-docs-dist",
+      "target": "${containerWorkspaceFolder}/docs-site/dist",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-docs-astro",
+      "target": "${containerWorkspaceFolder}/docs-site/.astro",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-npm-cache",
+      "target": "/home/vscode/.npm",
+      "type": "volume"
+    },
+    {
+      "source": "vscode-logrotate-${devcontainerId}-cache",
+      "target": "/home/vscode/.cache",
+      "type": "volume"
+    }
+  ],
+  "containerEnv": {
+    "ASTRO_TELEMETRY_DISABLED": "1",
+    "CHROME_PATH": "/usr/bin/chromium",
+    "CHROMIUM_PATH": "/usr/bin/chromium",
+    "LOGROTATE_SOURCE": "/home/vscode/.cache/vscode-logrotate/upstream"
+  },
+  "postCreateCommand": ["bash", ".devcontainer/post-create.sh"],
+  "postStartCommand": ["bash", ".devcontainer/start-docker-proxy.sh"],
+  "waitFor": "postCreateCommand",
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "forwardPorts": [3000, 4321],
+  "portsAttributes": {
+    "3000": {
+      "label": "VS Code for the Web tests",
+      "onAutoForward": "silent"
+    },
+    "4321": {
+      "label": "Logrotate documentation",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "astro-build.astro-vscode",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-containers"
+      ]
+    }
+  }
+}

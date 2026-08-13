@@ -123,6 +123,8 @@ describe("workflow supply-chain policy", () => {
     );
     expect(ci).toContain("npm run test:web");
     expect(ci).toContain("npm run test:vsix:prepared");
+    expect(ci).toContain("npm run package:artifacts");
+    expect(ci).not.toContain("run: node ./scripts/build-release-artifacts.mjs");
     expect(ci).toContain("dist/test/desktop/extension.test.cjs");
     expect(ci).toContain("dist/test/web/index.cjs");
     expect(ci).toMatch(/remote_ssh:[\s\S]*name: Remote SSH host[\s\S]*needs: package/u);

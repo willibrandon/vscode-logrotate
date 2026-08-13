@@ -10,7 +10,7 @@ await runTests({
   folderPath: resolve(root, "test/fixtures/workspace"),
   headless: true,
   quality: process.env.VSCODE_WEB_QUALITY === "insiders" ? "insiders" : "stable",
-  testRunnerDataDir: resolve(root, ".vscode-test-web"),
+  testRunnerDataDir: resolve(root, ".vscode-test-web/runtime"),
 });
 
 process.stdout.write("VS Code web extension tests passed.\n");

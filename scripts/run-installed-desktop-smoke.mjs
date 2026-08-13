@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { runVSCodeCommand } from "@vscode/test-electron";
+import { createIsolatedVSCodeEnvironment } from "./vscode-test-environment.mjs";
 
 export async function runInstalledDesktopSmoke(options) {
   const {
@@ -12,7 +13,7 @@ export async function runInstalledDesktopSmoke(options) {
     userDataDirectory,
     version,
   } = options;
-  const commandEnvironment = { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" };
+  const commandEnvironment = createIsolatedVSCodeEnvironment();
   const expectedVersion = expectedIdentity.slice(expectedIdentity.lastIndexOf("@") + 1);
   const profileArguments = [
     `--extensions-dir=${extensionsDirectory}`,

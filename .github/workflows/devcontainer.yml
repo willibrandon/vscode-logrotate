@@ -1,0 +1,62 @@
+name: Development container
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devcontainer-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build, verify, and scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and verify the development container
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          imageName: vscode-logrotate-devcontainer
+          imageTag: ci
+          push: never
+          inheritEnv: false
+          runCmd: bash .devcontainer/verify.sh
+      - name: Install Picket
+        run: bash .github/scripts/install-picket.sh "$RUNNER_TEMP/picket"
+      - name: Scan the development container image
+        run: |
+          docker save vscode-logrotate-devcontainer:ci --output "$RUNNER_TEMP/devcontainer.tar"
+          "$RUNNER_TEMP/picket/picket" scan \
+            --docker-archive "$RUNNER_TEMP/devcontainer.tar" \
+            --ignore-path .picketignore \
+            --report-format sarif \
+            --report-path "$RUNNER_TEMP/devcontainer.picket.sarif" \
+            --redact 100 \
+            --max-target-megabytes 64 \
+            --max-archive-depth 2 \
+            --max-archive-entries 100000 \
+            --max-archive-megabytes 4096 \
+            --max-archive-ratio 1000 \
+            --timeout 900 \
+            --exit-code 1 \
+            --no-banner
+      - name: Upload Picket report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: devcontainer-picket
+          path: ${{ runner.temp }}/devcontainer.picket.sarif
+          if-no-files-found: warn
+          retention-days: 7

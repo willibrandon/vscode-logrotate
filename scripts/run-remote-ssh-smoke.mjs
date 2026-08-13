@@ -1,7 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import process from "node:process";
 import { promisify } from "node:util";
@@ -12,6 +13,7 @@ import {
   sshConfigPath,
   sshNullDevice,
 } from "./remote-smoke-host.mjs";
+import { createIsolatedVSCodeEnvironment } from "./vscode-test-environment.mjs";
 
 const executeFile = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
@@ -62,15 +64,11 @@ try {
     resolve(root, "test/remote"),
   ]);
   await run("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
-  await run("docker", [
-    "run",
-    "--detach",
-    "--name",
-    container,
-    "--publish",
-    "127.0.0.1::22",
-    image,
-  ]);
+  const runningInContainer = existsSync("/.dockerenv");
+  const networkArguments = runningInContainer
+    ? ["--network", `container:${hostname()}`]
+    : ["--publish", "127.0.0.1::22"];
+  await run("docker", ["run", "--detach", "--name", container, ...networkArguments, image]);
   containerStarted = true;
   await run("docker", ["cp", `${key}.pub`, `${container}:/tmp/ci-key.pub`]);
   await run("docker", [
@@ -86,8 +84,9 @@ try {
     "/tmp/ci-key.pub",
     "/home/vscode/.ssh/authorized_keys",
   ]);
-  const { stdout: portOutput } = await run("docker", ["port", container, "22/tcp"]);
-  const port = parsePort(portOutput);
+  const port = runningInContainer
+    ? 22
+    : parsePort((await run("docker", ["port", container, "22/tcp"])).stdout);
   await writeFile(
     sshConfig,
     [
@@ -104,7 +103,8 @@ try {
     "utf8",
   );
   if (process.platform !== "win32") await chmod(sshConfig, 0o600);
-  await run("ssh", ["-F", sshConfig, "-o", "BatchMode=yes", "logrotate-ci", "true"]);
+  const sshProbe = ["-F", sshConfig, "-o", "BatchMode=yes", "logrotate-ci", "true"];
+  await waitFor(() => commandSucceeds("ssh", sshProbe), 30_000, "the remote SSH daemon");
   const settings = `${JSON.stringify(
     {
       "extensions.autoCheckUpdates": false,
@@ -133,7 +133,7 @@ try {
 
   const version = process.env.VSCODE_VERSION ?? "stable";
   const vscodeExecutable = await downloadAndUnzipVSCode(version);
-  const commandEnvironment = { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" };
+  const commandEnvironment = createIsolatedVSCodeEnvironment();
   await runCodeCommand(
     [
       "--user-data-dir",
@@ -163,6 +163,7 @@ try {
     bootstrapUserDataDirectory,
     extensionsDirectory,
     "/home/vscode/workspace",
+    commandEnvironment,
   );
   const codeServer = await waitForValue(
     async () => {
@@ -225,6 +226,7 @@ try {
     userDataDirectory,
     extensionsDirectory,
     "/home/vscode/workspace",
+    commandEnvironment,
   );
   await waitFor(
     async () => commandSucceeds("docker", ["exec", container, "test", "-f", resultPath]),
@@ -323,7 +325,7 @@ async function packageProbe(output) {
   });
 }
 
-function launchRemoteCode(executable, userData, extensions, remotePath) {
+function launchRemoteCode(executable, userData, extensions, remotePath, environment) {
   const launch = createRemoteCodeLaunch(process.platform, executable, [
     "--no-cached-data",
     "--disable-workspace-trust",
@@ -342,7 +344,7 @@ function launchRemoteCode(executable, userData, extensions, remotePath) {
   return spawn(launch.command, launch.arguments, {
     cwd: root,
     detached: true,
-    env: { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" },
+    env: environment,
     shell: false,
     stdio: "inherit",
     windowsHide: true,

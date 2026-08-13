@@ -13,6 +13,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan for secrets
+        uses: willibrandon/picket@cb6cbae0f5c9d35e75642e9ded88a3edaa8d12c8 # v0.2.11
+        with:
+          cache-mode: secret-hash-only
+          fail-on: findings
+          redact: 100
+          timeout: 300
+
   quality:
     name: Quality and bundles
     runs-on: ubuntu-latest
@@ -66,7 +83,7 @@ jobs:
       - run: npm run check:bundles
       - run: npm run check:licenses
       - run: npm run check:package
-      - run: node ./scripts/build-release-artifacts.mjs
+      - run: npm run package:artifacts
       - run: npm run test:vsix:prepared
       - name: Stage candidate artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

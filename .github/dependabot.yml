@@ -39,3 +39,21 @@ updates:
       day: monday
       time: "11:00"
       timezone: America/Los_Angeles
+    ignore:
+      # Toolchain versions are coordinated with the repository's other pins.
+      # Dependabot may still refresh the digest behind each exact tag.
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: docker
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: mcr.microsoft.com/devcontainers/base
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch

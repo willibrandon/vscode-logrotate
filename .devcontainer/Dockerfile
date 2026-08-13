@@ -1,5 +1,5 @@
 # node:24.19.0-trixie-slim
-FROM node@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS node-toolchain
+FROM node@sha256:bde0dae02f2b12d2bce5ee72b2432f0e511767b7b2dc4dd3b064df11ae422fee AS node-toolchain
 
 RUN npm install --global npm@12.0.2 \
     && rm -rf -- /root/.npm

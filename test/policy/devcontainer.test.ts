@@ -35,10 +35,15 @@ describe("development container policy", () => {
     ]);
     const config = JSON.parse(configText) as DevContainer;
 
-    expect(dockerfile).toContain("# mcr.microsoft.com/devcontainers/base:2-trixie");
-    expect(dockerfile).toContain("# node:24.19.0-trixie-slim");
-    expect(dockerfile).toContain("# docker:29.7.2-cli");
-    expect(dockerfile.match(/^FROM [^\s]+@sha256:[0-9a-f]{64}(?: AS [\w-]+)?$/gmu)).toHaveLength(3);
+    expect(dockerfile).toMatch(
+      /^FROM node:24\.19\.0-trixie-slim@sha256:[0-9a-f]{64} AS node-toolchain$/mu,
+    );
+    expect(dockerfile).toMatch(
+      /^FROM docker:29\.7\.2-cli@sha256:[0-9a-f]{64} AS docker-toolchain$/mu,
+    );
+    expect(dockerfile).toMatch(
+      /^FROM mcr\.microsoft\.com\/devcontainers\/base:2-trixie@sha256:[0-9a-f]{64}$/mu,
+    );
     expect(dockerfile).toContain("npm install --global npm@12.0.2");
     expect(dockerfile).toContain("apt-get install --yes --no-install-recommends");
     expect(dockerfile).toContain("chromium");
@@ -240,5 +245,9 @@ describe("development container policy", () => {
 
     expect(dependabot).toContain("package-ecosystem: docker");
     expect(dependabot).toContain("directory: /.devcontainer");
+    for (const dependency of ["node", "docker", "mcr.microsoft.com/devcontainers/base"]) {
+      expect(dependabot).toContain(`dependency-name: ${dependency}`);
+    }
+    expect(dependabot.match(/version-update:semver-(?:major|minor|patch)/gu)).toHaveLength(10);
   });
 });

@@ -111,7 +111,8 @@
         "astro-build.astro-vscode",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "ms-azuretools.vscode-containers"
+        "ms-azuretools.vscode-containers",
+        "willibrandon.logrotate@0.1.9"
       ]
     }
   }

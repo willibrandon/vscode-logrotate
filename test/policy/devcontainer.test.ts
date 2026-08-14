@@ -182,10 +182,9 @@ describe("development container policy", () => {
   });
 
   it("builds and scans the container without forwarding runner secrets", async () => {
-    const [workflow, ci, installPicket] = await Promise.all([
+    const [workflow, ci] = await Promise.all([
       readFile(resolve(root, ".github/workflows/devcontainer.yml"), "utf8"),
       readFile(resolve(root, ".github/workflows/ci.yml"), "utf8"),
-      readFile(resolve(root, ".github/scripts/install-picket.sh"), "utf8"),
     ]);
     const document = parseDocument(workflow);
 
@@ -193,30 +192,33 @@ describe("development container policy", () => {
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/mu);
     expect(workflow).toContain("uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca");
     expect(ci).toContain("uses: willibrandon/picket@cb6cbae0f5c9d35e75642e9ded88a3edaa8d12c8");
-    expect(installPicket).toContain('readonly version="0.2.11"');
-    expect(installPicket).toContain(
-      'readonly expected_sha256="c1d694a56c2eb7844b0145ac31696952c7cf31198ff26b7cf50eb2a3131c3b54"',
+    expect(workflow).toContain(
+      "uses: willibrandon/picket@4c9f7d28260bfe0a7334865c84db093519f6f57f",
     );
     expect(ci).toContain("cache-mode: secret-hash-only");
     expect(ci).toContain("fail-on: findings");
     expect(ci).toContain("redact: 100");
     expect(ci).toContain("timeout: 300");
-    expect(workflow).not.toContain("uses: willibrandon/picket@");
     expect(workflow).toContain("inheritEnv: false");
     expect(workflow).toContain("push: never");
     expect(workflow).toContain("docker save vscode-logrotate-devcontainer:ci");
-    expect(workflow).toContain("--docker-archive");
-    expect(workflow).toContain("--ignore-path .picketignore");
-    expect(workflow).toContain("--report-format sarif");
-    expect(workflow).toContain("--redact 100");
-    expect(workflow).toContain("--max-target-megabytes 64");
-    expect(workflow).toContain("--max-archive-depth 2");
-    expect(workflow).toContain("--max-archive-entries 100000");
-    expect(workflow).toContain("--max-archive-megabytes 4096");
-    expect(workflow).toContain("--max-archive-ratio 1000");
-    expect(workflow).toContain("--timeout 900");
-    expect(workflow).toContain("--exit-code 1");
-    expect(workflow).toContain("--no-banner");
+    expect(workflow).not.toContain(".github/scripts/install-picket.sh");
+    expect(workflow).not.toContain('"$RUNNER_TEMP/picket/picket" scan');
+    expect(workflow).toContain("docker-archive: ${{ runner.temp }}/devcontainer.tar");
+    expect(workflow).toContain("ignore-path: .picketignore");
+    expect(workflow).toContain('cache: "false"');
+    expect(workflow).toContain("report-directory: ${{ runner.temp }}/devcontainer-picket");
+    expect(workflow).toContain("fail-on: findings");
+    expect(workflow).toContain('summary: "false"');
+    expect(workflow).toContain('upload-sarif: "false"');
+    expect(workflow).toContain('annotations: "false"');
+    expect(workflow).toContain('redact: "100"');
+    expect(workflow).toContain('max-target-megabytes: "64"');
+    expect(workflow).toContain('max-archive-depth: "2"');
+    expect(workflow).toContain('max-archive-entries: "100000"');
+    expect(workflow).toContain('max-archive-megabytes: "4096"');
+    expect(workflow).toContain('max-archive-ratio: "1000"');
+    expect(workflow).toContain('timeout: "900"');
     expect(workflow).toContain("if: ${{ always() }}");
     expect(workflow).toContain(
       "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",

@@ -119,7 +119,9 @@ suite("Logrotate desktop extension", () => {
       return new vscode.Selection(position, position);
     });
 
-    await toggleCommentsAfterEmbeddedLanguageLoads(editor, document, selections, source, 4);
+    await vscode.commands.executeCommand("editor.action.forceRetokenize");
+    editor.selections = selections;
+    await executeAndWaitForDocumentChange("editor.action.commentLine", document);
 
     assert.equal(document.lineAt(0).text, "# /var/log/application.log {");
     assert.equal(document.lineAt(1).text, "  # daily");
@@ -131,26 +133,6 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.getText(), source);
   });
 });
-
-async function toggleCommentsAfterEmbeddedLanguageLoads(
-  editor: vscode.TextEditor,
-  document: vscode.TextDocument,
-  selections: readonly vscode.Selection[],
-  source: string,
-  embeddedLine: number,
-): Promise<void> {
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
-    editor.selections = [...selections];
-    await executeAndWaitForDocumentChange("editor.action.commentLine", document);
-    if (document.lineAt(embeddedLine).text === "    echo rotated") return;
-
-    await executeAndWaitForDocumentChange("undo", document);
-    assert.equal(document.getText(), source);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  assert.fail("embedded shell language did not become available to the comment command");
-}
 
 async function executeAndWaitForDocumentChange(
   command: string,

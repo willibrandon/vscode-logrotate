@@ -191,7 +191,7 @@ describe("development container policy", () => {
     expect(document.errors).toEqual([]);
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/mu);
     expect(workflow).toContain("uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca");
-    expect(ci).toContain("uses: willibrandon/picket@cb6cbae0f5c9d35e75642e9ded88a3edaa8d12c8");
+    expect(ci).toContain("uses: willibrandon/picket@4c9f7d28260bfe0a7334865c84db093519f6f57f");
     expect(workflow).toContain(
       "uses: willibrandon/picket@4c9f7d28260bfe0a7334865c84db093519f6f57f",
     );

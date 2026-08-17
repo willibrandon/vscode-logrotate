@@ -10,6 +10,10 @@ interface ExtensionManifest {
   readonly version: string;
 }
 
+interface SyntaxToken {
+  readonly t: string;
+}
+
 suite("Logrotate desktop extension", () => {
   test("activates the Node client and starts the language server", async () => {
     const extension = vscode.extensions.getExtension(extensionId);
@@ -95,7 +99,18 @@ suite("Logrotate desktop extension", () => {
     assert.ok(edits !== undefined && edits.length > 0, "expected formatting edits");
   });
 
-  test("toggles configuration comments at indentation boundaries and leaves embedded shell to its language", async () => {
+  test("tokenizes embedded shell and toggles configuration comments at indentation boundaries", async () => {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(folder, "the integration workspace was not opened");
+    const tokens = await vscode.commands.executeCommand<readonly SyntaxToken[] | undefined>(
+      "_workbench.captureSyntaxTokens",
+      vscode.Uri.joinPath(folder.uri, "theme-preview.logrotate"),
+    );
+    assert.ok(
+      tokens?.some(({ t }) => t.includes("meta.embedded.block.shell source.shell")),
+      "the logrotate grammar did not tokenize its embedded shell block",
+    );
+
     const source = [
       "/var/log/application.log {",
       "  daily",
@@ -111,7 +126,7 @@ suite("Logrotate desktop extension", () => {
       content: source,
     });
     const editor = await vscode.window.showTextDocument(document);
-    const selections = [0, 1, 2, 4].map((line) => {
+    const selections = [0, 1, 2].map((line) => {
       const position = new vscode.Position(
         line,
         document.lineAt(line).firstNonWhitespaceCharacterIndex,
@@ -119,7 +134,6 @@ suite("Logrotate desktop extension", () => {
       return new vscode.Selection(position, position);
     });
 
-    await vscode.commands.executeCommand("editor.action.forceRetokenize");
     editor.selections = selections;
     await executeAndWaitForDocumentChange("editor.action.commentLine", document);
 
@@ -128,7 +142,7 @@ suite("Logrotate desktop extension", () => {
     assert.equal(document.lineAt(2).text, "  # ");
     assert.equal(document.lineAt(4).text, "    echo rotated");
 
-    editor.selections = selections.slice(0, 3);
+    editor.selections = selections;
     await executeAndWaitForDocumentChange("editor.action.commentLine", document);
     assert.equal(document.getText(), source);
   });

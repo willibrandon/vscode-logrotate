@@ -389,10 +389,12 @@ This leads to the following 2026 baseline:
   use notifications for ordinary success, activation, or missing optional tools
   ([settings UX](https://code.visualstudio.com/api/ux-guidelines/settings),
   [notification UX](https://code.visualstudio.com/api/ux-guidelines/notifications)).
-- Publish the VSIX with current `@vscode/vsce` using the narrowly scoped
-  `VSCE_PAT` GitHub Actions secret for the `willibrandon` publisher
+- Publish the same VSIX to the Visual Studio Marketplace with `@vscode/vsce` and to Open VSX with
+  `ovsx`, using narrowly scoped `VSCE_PAT` and `OVSX_PAT` GitHub Actions secrets for the
+  `willibrandon` publisher
   ([VSCE repository](https://github.com/microsoft/vscode-vsce),
-  [publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension)).
+  [publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension),
+  [publishing to Open VSX](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions)).
 
 The implementation target is `^1.102.0`. VS Code 1.102 introduced the schema-supported
 `comments.lineComment` object needed to express indentation behavior without a language
@@ -585,7 +587,7 @@ inside a Worker. The same abstraction should be available to desktop tests.
 
 The bootstrap should use current stable majors on implementation day and commit
 exact resolutions. The registry snapshot on 2026-08-11 included TypeScript 7.0,
-esbuild 0.28, ESLint 10, `@vscode/vsce` 3.9,
+esbuild 0.28, ESLint 10, `@vscode/vsce` 3.9, `ovsx` 1.1,
 `vscode-languageclient`/`vscode-languageserver` 10.1,
 `@vscode/test-electron` 3.1, and Node 24 LTS. Re-resolve patch releases when the
 repository is scaffolded, because this document is not a lockfile.
@@ -1140,10 +1142,11 @@ Renovate updates actions and npm dependencies through reviewed pull requests.
 2. Re-run required CI and build a single VSIX in a protected environment.
 3. Generate checksum, SPDX or CycloneDX SBOM, provenance/attestation, and release
    notes.
-4. Publish the same bytes to the VS Code Marketplace using the `VSCE_PAT`
-   repository or protected-environment secret.
+4. Publish the same bytes to the VS Code Marketplace and Open VSX using the `VSCE_PAT` and
+   `OVSX_PAT` secrets.
 5. Attach the VSIX, checksum, SBOM, and provenance to the GitHub release.
-6. Verify Marketplace installation before announcing the release.
+6. Verify the checksums in both registries and the Marketplace installation before announcing the
+   release.
 
 GitHub artifact attestations can establish build provenance and should accompany
 the release artifact
@@ -1178,8 +1181,8 @@ versions, while the optional installed-binary check reflects one host.
 
 ### Phase 0: specification and project bootstrap
 
-- Confirm public repository ownership, the `willibrandon` Marketplace publisher,
-  and the independently authored MIT licensing boundary.
+- Confirm public repository ownership, the `willibrandon` Marketplace publisher and Open VSX
+  namespace, and the independently authored MIT licensing boundary.
 - Scaffold npm workspaces, strict TypeScript, bundle entries, CI, and package
   allowlist.
 - Pin an upstream logrotate compatibility revision.
@@ -1252,8 +1255,8 @@ The extension is ready for 1.0 only when all of the following are true:
   telemetry, runtime network call, sidebar, or routine notification.
 - CI tests the declared VS Code floor, stable, web, all three desktop operating
   systems, grammar scopes, package contents, and dependency/security policy.
-- The Marketplace and GitHub release artifact is the same tested, checksummed,
-  attested VSIX.
+- The Marketplace, Open VSX, and GitHub release artifact is the same tested, checksummed, attested
+  VSIX.
 
 ## 23. Risks and explicit decisions
 

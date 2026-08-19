@@ -1,6 +1,6 @@
 {
   "name": "@logrotate/language-server",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -8,6 +8,6 @@
     "./protocol": "./src/protocol.ts"
   },
   "dependencies": {
-    "@logrotate/language-core": "0.1.9"
+    "@logrotate/language-core": "0.2.0"
   }
 }

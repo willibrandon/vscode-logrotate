@@ -91,6 +91,7 @@ describe("documentation contract", () => {
     expect(readme).toContain(
       "https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate",
     );
+    expect(readme).toContain("https://open-vsx.org/extension/willibrandon/logrotate");
   });
 
   it("keeps the user site complete, concise, and independent from maintainer identity", async () => {
@@ -119,6 +120,7 @@ describe("documentation contract", () => {
     ]) {
       expect(combined, command).toContain(command);
     }
+    expect(combined).toContain("https://open-vsx.org/extension/willibrandon/logrotate");
 
     for (const [path, source] of documents) {
       const body = source.replace(/^---\n[\s\S]*?\n---\n/u, "");

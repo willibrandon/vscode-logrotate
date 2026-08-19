@@ -3,9 +3,10 @@ title: Getting started
 description: Install the extension and open a logrotate configuration.
 ---
 
-Install
-[Logrotate from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate).
-The extension supports Visual Studio Code desktop, remote extension hosts, and vscode.dev.
+Install Logrotate from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate)
+or [Open VSX](https://open-vsx.org/extension/willibrandon/logrotate). The extension supports Visual
+Studio Code desktop, remote extension hosts, and vscode.dev.
 
 ## Try a configuration
 

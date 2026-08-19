@@ -5,6 +5,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-18
+
+### Added
+
+- Stable publishing to Open VSX alongside the Visual Studio Marketplace from the same checked and
+  attested VSIX.
+- A public documentation site with focused guides for setup, editing, validation, privacy, and
+  troubleshooting.
+- A reproducible development container with pinned tools, isolated caches, and image scanning.
+
+### Changed
+
+- Version 0.2.0 begins the stable release channel.
+- GitHub Actions and development dependencies were updated within the supported runtime range.
+
+### Fixed
+
+- Embedded-comment integration coverage now waits for the editor state it asserts.
+- The VS Code web test cache is excluded from repository formatting and release checks.
+
 ## [0.1.9] - 2026-08-12
 
 ### Fixed
@@ -96,7 +116,8 @@ creation.
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.6...v0.1.7

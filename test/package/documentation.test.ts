@@ -30,6 +30,10 @@ const themeImages = [
   "dracula.png",
   "one-dark-pro.png",
 ] as const;
+const docsSiteImages = [
+  { file: "directive-completion.png", width: 2_464, height: 620 },
+  { file: "diagnostic-quick-fix.png", width: 802, height: 480 },
+] as const;
 const docsSiteDocuments = [
   "docs-site/src/content/docs/index.md",
   "docs-site/src/content/docs/getting-started.md",
@@ -176,6 +180,24 @@ describe("documentation contract", () => {
       await readFile(resolve(root, "scripts/package-files.json"), "utf8"),
     ) as string[];
     expect(packagedFiles).not.toContain("docs/images/dark-plus.png");
+  });
+
+  it("keeps the user site screenshots valid, bounded, and linked from the guide", async () => {
+    const gettingStarted = await readFile(
+      resolve(root, "docs-site/src/content/docs/getting-started.md"),
+      "utf8",
+    );
+    const editing = await readFile(resolve(root, "docs-site/src/content/docs/editing.md"), "utf8");
+    const guide = `${gettingStarted}\n${editing}`;
+
+    for (const image of docsSiteImages) {
+      const bytes = await readFile(resolve(root, "docs-site/src/assets", image.file));
+      expect(bytes.subarray(0, 8).toString("hex"), image.file).toBe("89504e470d0a1a0a");
+      expect(bytes.readUInt32BE(16), image.file).toBe(image.width);
+      expect(bytes.readUInt32BE(20), image.file).toBe(image.height);
+      expect(bytes.byteLength, image.file).toBeLessThan(250_000);
+      expect(guide, image.file).toContain(`../../assets/${image.file}`);
+    }
   });
 
   it("resolves every relative Markdown link in maintained prose", async () => {

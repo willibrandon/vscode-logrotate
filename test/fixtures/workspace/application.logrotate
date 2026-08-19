@@ -1,0 +1,7 @@
+# Rotate application logs every week.
+/var/log/application.log {
+    weekly
+    rotate 4
+
+    com
+}

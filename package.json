@@ -265,6 +265,7 @@
     "verify:open-vsx": "node ./scripts/verify-open-vsx-release.mjs",
     "test:integration": "npm run build && node ./scripts/run-desktop-tests.mjs",
     "test:web": "npm run build && node ./scripts/run-web-tests.mjs",
+    "capture:docs": "npm run build && node ./scripts/capture-docs-screenshots.mjs",
     "capture:themes": "npm run build && node ./scripts/capture-theme-screenshots.mjs",
     "build": "node ./esbuild.mjs",
     "check:bundles": "node ./scripts/check-bundles.mjs",

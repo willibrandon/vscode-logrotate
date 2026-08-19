@@ -24,8 +24,12 @@ editor support:
 ## Explore editor support
 
 Move the cursor over a directive to read its description. Run **Trigger Suggest** to see directives
-valid at the cursor. Misspell a directive to see a diagnostic in the editor and the Problems view.
-Run **Quick Fix** when a safe correction is available.
+valid at the cursor.
+
+![Directive suggestions for a logrotate stanza in Visual Studio Code](../../assets/directive-completion.png)
+
+Misspell a directive to see a diagnostic in the editor and the Problems view. Run **Quick Fix** when
+a safe correction is available.
 
 Run **Format Document** to normalize configuration indentation and spacing. Text inside `prerotate`,
 `postrotate`, `firstaction`, `lastaction`, and `preremove` blocks is preserved exactly.

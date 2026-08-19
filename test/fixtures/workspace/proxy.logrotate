@@ -1,0 +1,7 @@
+# Rotate proxy logs every week.
+/var/log/proxy.log {
+    weekly
+    rotate 4
+
+    compres
+}

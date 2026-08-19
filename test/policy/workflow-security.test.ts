@@ -244,6 +244,7 @@ describe("workflow supply-chain policy", () => {
     expect(marketplaceVerifier).toContain('createHash("sha256")');
     expect(openVsxVerifier).toContain("metadata.files.sha256");
     expect(openVsxVerifier).toContain('createHash("sha256")');
+    expect(openVsxVerifier).toContain('new URL("/api/willibrandon/logrotate", registryOrigin)');
     expect(release).toContain("Number(require('./package.json').version.split('.')[1]) % 2 === 1");
     expect(release.match(/PRERELEASE_FLAG\+?=\(\)|PRERELEASE_FLAG=\(\)/gu)).toHaveLength(2);
     expect(release.match(/PRERELEASE_FLAG\+?=\(--pre-release\)/gu)).toHaveLength(1);

@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 const root = resolve(import.meta.dirname, "..");
 const registryOrigin = "https://open-vsx.org";
+const registryExtensionUrl = new URL("/api/willibrandon/logrotate", registryOrigin);
 
 export function isExpectedOpenVsxRelease(metadata, expected) {
   if (typeof metadata !== "object" || metadata === null) return false;
@@ -58,9 +59,8 @@ export async function waitForOpenVsxRelease(options) {
   );
 }
 
-async function queryOpenVsxRelease(expected) {
-  const url = openVsxUrl(expected.publisher, expected.name, expected.version);
-  const response = await fetch(url, {
+async function queryOpenVsxRelease() {
+  const response = await fetch(registryExtensionUrl, {
     headers: { accept: "application/json" },
     signal: AbortSignal.timeout(60_000),
   });
@@ -115,18 +115,11 @@ async function verifyOpenVsxRelease() {
     attempts,
     delay,
     expected,
-    query: async () => queryOpenVsxRelease(expected),
+    query: queryOpenVsxRelease,
     readSha256: readOpenVsxSha256,
   });
   console.log(
     `Verified Open VSX version, channel, and checksum for ${expected.publisher}.${expected.name}@${expected.version}.`,
-  );
-}
-
-function openVsxUrl(...segments) {
-  return new URL(
-    `/api/${segments.map((segment) => encodeURIComponent(segment)).join("/")}`,
-    registryOrigin,
   );
 }
 

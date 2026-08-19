@@ -74,6 +74,15 @@ jobs:
             exit 1
           fi
           npx vsce verify-pat willibrandon
+      - name: Verify Open VSX publisher access
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [[ -z "$OVSX_PAT" ]]; then
+            echo "The OVSX_PAT repository secret is required." >&2
+            exit 1
+          fi
+          npx ovsx verify-pat willibrandon --pat "$OVSX_PAT"
       - name: Build the release artifacts once
         run: npm run package
       - name: Record immutable artifact paths
@@ -121,10 +130,21 @@ jobs:
           fi
           PRERELEASE_FLAG=()
           if [[ "$PRERELEASE" == "true" ]]; then PRERELEASE_FLAG+=(--pre-release); fi
-          npx vsce publish --packagePath "$VSIX_PATH" --no-dependencies "${PRERELEASE_FLAG[@]}"
+          npx vsce publish --packagePath "$VSIX_PATH" --no-dependencies --skip-duplicate "${PRERELEASE_FLAG[@]}"
+      - name: Publish the exact VSIX to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [[ -z "$OVSX_PAT" ]]; then
+            echo "The OVSX_PAT repository secret is required." >&2
+            exit 1
+          fi
+          npx ovsx publish "$VSIX_PATH" --pat "$OVSX_PAT" --skip-duplicate
       - name: Verify Marketplace propagation, installation, and activation
         run: npm run verify:marketplace
-      - name: Publish the GitHub release after the Marketplace succeeds
+      - name: Verify Open VSX propagation and checksum
+        run: npm run verify:open-vsx
+      - name: Publish the GitHub release after both registries succeed
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "$GITHUB_REF_NAME" --draft=false

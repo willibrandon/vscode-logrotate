@@ -2,14 +2,14 @@
 
 ## Supported versions
 
-Until the first stable release, the current `0.1.x` pre-release line and `main` receive security
-fixes. After a stable release, the latest stable line and any explicitly listed maintained
-pre-release line are supported. This table is updated as releases are made.
+The latest stable line and `main` receive security fixes. Any maintained pre-release line is listed
+explicitly. This table is updated as releases are made.
 
 | Version             | Supported |
 | ------------------- | --------- |
 | `main`              | Yes       |
-| `0.1.x` pre-release | Yes       |
+| `0.2.x` stable      | Yes       |
+| `0.1.x` pre-release | No        |
 
 ## Reporting a vulnerability
 

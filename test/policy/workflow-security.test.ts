@@ -221,6 +221,10 @@ describe("workflow supply-chain policy", () => {
       resolve(root, "scripts/verify-marketplace-release.mjs"),
       "utf8",
     );
+    const openVsxVerifier = await readFile(
+      resolve(root, "scripts/verify-open-vsx-release.mjs"),
+      "utf8",
+    );
     expect(release).toContain("node ./scripts/check-release.mjs");
     expect(release).toContain("npm run test:installed-logrotate");
     expect(release).toContain('LOGROTATE_EXPECTED_VERSION: "3.22"');
@@ -229,23 +233,37 @@ describe("workflow supply-chain policy", () => {
     expect(release).toContain("subject-path: ${{ env.VSIX_PATH }}");
     expect(release).toContain("sbom-path: ${{ env.SBOM_PATH }}");
     expect(release).toContain("npx vsce verify-pat willibrandon");
-    expect(release).toContain('npx vsce publish --packagePath "$VSIX_PATH" --no-dependencies');
+    expect(release).toContain("npx ovsx verify-pat willibrandon");
+    expect(release).toContain(
+      'npx vsce publish --packagePath "$VSIX_PATH" --no-dependencies --skip-duplicate',
+    );
+    expect(release).toContain('npx ovsx publish "$VSIX_PATH" --pat "$OVSX_PAT" --skip-duplicate');
     expect(release).toContain("npm run verify:marketplace");
+    expect(release).toContain("npm run verify:open-vsx");
     expect(marketplaceVerifier).toContain("Microsoft.VisualStudio.Services.VsixSha256");
     expect(marketplaceVerifier).toContain('createHash("sha256")');
+    expect(openVsxVerifier).toContain("metadata.files.sha256");
+    expect(openVsxVerifier).toContain('createHash("sha256")');
+    expect(openVsxVerifier).toContain('new URL("/api/willibrandon/logrotate", registryOrigin)');
     expect(release).toContain("Number(require('./package.json').version.split('.')[1]) % 2 === 1");
     expect(release.match(/PRERELEASE_FLAG\+?=\(\)|PRERELEASE_FLAG=\(\)/gu)).toHaveLength(2);
     expect(release.match(/PRERELEASE_FLAG\+?=\(--pre-release\)/gu)).toHaveLength(1);
     expect(release).toContain("PRERELEASE_FLAG+=(--prerelease)");
     expect(release).toContain('"$VSIX_PATH" "$CHECKSUM_PATH" "$SBOM_PATH"');
     expect(release).toContain("VSCE_PAT: ${{ secrets.VSCE_PAT }}");
-    expect(release).not.toMatch(/OVSX|--oidc/u);
+    expect(release).toContain("OVSX_PAT: ${{ secrets.OVSX_PAT }}");
+    expect(release).not.toContain("--packageVersion");
+    expect(release).not.toContain("--oidc");
     const marketplacePublish = release.indexOf("npx vsce publish");
+    const openVsxPublish = release.indexOf("npx ovsx publish");
     const marketplaceVerification = release.indexOf("npm run verify:marketplace");
+    const openVsxVerification = release.indexOf("npm run verify:open-vsx");
     const githubPublication = release.indexOf('gh release edit "$GITHUB_REF_NAME" --draft=false');
     expect(marketplacePublish).toBeGreaterThan(-1);
-    expect(marketplaceVerification).toBeGreaterThan(marketplacePublish);
-    expect(githubPublication).toBeGreaterThan(marketplaceVerification);
+    expect(openVsxPublish).toBeGreaterThan(marketplacePublish);
+    expect(marketplaceVerification).toBeGreaterThan(openVsxPublish);
+    expect(openVsxVerification).toBeGreaterThan(marketplaceVerification);
+    expect(githubPublication).toBeGreaterThan(openVsxVerification);
   });
 
   it("keeps scheduled drift detection review-only", () => {

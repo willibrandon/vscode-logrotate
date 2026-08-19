@@ -10,8 +10,10 @@ navigation, and formatting follow when the language server starts.
 
 ## Start editing
 
-[Install Logrotate from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate),
-then open a configuration file. A local logrotate installation is not required for normal editing.
+Install Logrotate from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate)
+or [Open VSX](https://open-vsx.org/extension/willibrandon/logrotate), then open a configuration
+file. A local logrotate installation is not required for normal editing.
 
 ![A logrotate configuration with syntax highlighting in the Dracula theme](../../../../docs/images/dracula.png)
 

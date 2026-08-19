@@ -19,6 +19,8 @@ and unsafe combinations. A diagnostic is conservative when the answer depends on
 Safe quick fixes can correct a close spelling, add a prerequisite, close a block, or update an
 explicitly selected path.
 
+![A misspelled directive with its diagnostic and suggested quick fix](../../assets/diagnostic-quick-fix.png)
+
 Formatting preserves comments, quoting, and the bytes inside script bodies. It adjusts configuration
 indentation and spacing but does not reorder directives. Run **Format Document** from the Command
 Palette or the editor context menu.

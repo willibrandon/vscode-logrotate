@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { downloadAndUnzipVSCode, runVSCodeCommand } from "@vscode/test-electron";
 import {
   createRemoteCodeLaunch,
+  createRemoteCodeServerReadiness,
   requireLinuxDockerEngine,
   sshConfigPath,
   sshNullDevice,
@@ -455,22 +456,9 @@ async function listFiles(directory) {
 }
 
 async function findRemoteCodeServer(containerName, commit) {
-  const listing = await capture("docker", [
-    "exec",
-    containerName,
-    "find",
-    "/home/vscode/.vscode-server",
-    "-type",
-    "f",
-    "-name",
-    "code-server",
-    "-executable",
-    "-print",
-  ]);
-  return listing
-    ?.split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find((line) => line.includes(commit));
+  const readiness = createRemoteCodeServerReadiness(containerName, commit);
+  const complete = await commandSucceeds("docker", readiness.arguments);
+  return complete ? readiness.executable : undefined;
 }
 
 function validateResult(result) {

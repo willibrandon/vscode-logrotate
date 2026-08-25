@@ -11,6 +11,10 @@ interface RemoteSmokeHostModule {
     executable: string,
     arguments_: readonly string[],
   ): RemoteCodeLaunch;
+  createRemoteCodeServerReadiness(
+    container: string,
+    commit: string,
+  ): Readonly<{ readonly executable: string; readonly arguments: readonly string[] }>;
   requireLinuxDockerEngine(output: string): void;
   sshConfigPath(path: string): string;
   sshNullDevice(platform: NodeJS.Platform): string;
@@ -42,6 +46,24 @@ describe("Remote SSH smoke host", () => {
     expect(host.createRemoteCodeLaunch("darwin", "/Applications/Code", [])).toEqual({
       command: "/Applications/Code",
       arguments: [],
+    });
+  });
+
+  it("waits for the complete VS Code Server before using code-server", () => {
+    const commit = "110a328ea54b42367b803ec53ee0bf52ef26b419";
+    const directory = `/home/vscode/.vscode-server/bin/${commit}`;
+    expect(host.createRemoteCodeServerReadiness("logrotate-remote", commit)).toEqual({
+      executable: `${directory}/bin/code-server`,
+      arguments: [
+        "exec",
+        "logrotate-remote",
+        "test",
+        "-x",
+        `${directory}/node`,
+        "-a",
+        "-x",
+        `${directory}/bin/code-server`,
+      ],
     });
   });
 

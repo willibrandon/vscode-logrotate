@@ -18,6 +18,15 @@ export function createRemoteCodeLaunch(platform, executable, arguments_) {
   return { command: executable, arguments: [...arguments_] };
 }
 
+export function createRemoteCodeServerReadiness(container, commit) {
+  const directory = `/home/vscode/.vscode-server/bin/${commit}`;
+  const executable = `${directory}/bin/code-server`;
+  return {
+    executable,
+    arguments: ["exec", container, "test", "-x", `${directory}/node`, "-a", "-x", executable],
+  };
+}
+
 export function sshNullDevice(platform) {
   return platform === "win32" ? "NUL" : "/dev/null";
 }

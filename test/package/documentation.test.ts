@@ -91,6 +91,7 @@ describe("documentation contract", () => {
     expect(readme).toContain("Restricted Mode");
     expect(readme).toContain("Browser and virtual workspaces");
     expect(readme).toContain("secondary opinion, not the extension parser or formatter");
+    expect(readme).toContain("do not override an explicit Logrotate `include`");
     expect(readme).toContain("no telemetry and makes no runtime network requests");
     expect(readme).toContain(
       "https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate",

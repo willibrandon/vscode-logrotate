@@ -29,7 +29,8 @@ Palette or the editor context menu.
 
 Includes are analyzed through Visual Studio Code's filesystem API. Opening an included file assigns
 the Logrotate language and reports diagnostics on that file. Changes to loaded include files refresh
-the affected root configurations.
+the affected root configurations. An `include` is an explicit part of the Logrotate configuration,
+so it remains available when Git ignores the target or VS Code hides it with `files.exclude`.
 
 Directive documentation actions open the reviewed upstream logrotate manual. The extension models
 syntax through logrotate 3.22 and can use the installed version for the `auto` target when the

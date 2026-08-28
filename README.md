@@ -9,7 +9,7 @@ the extension from the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=willibrandon.logrotate)
 or [Open VSX](https://open-vsx.org/extension/willibrandon/logrotate).
 
-**Version 0.2.0 is the current stable release.** The language model is currently pinned to logrotate
+**Version 0.2.1 is the current stable release.** The language model is currently pinned to logrotate
 `3be1e9ccffe0c2245ed596183c74913d553f9f18` (3.22 and later reviewed syntax).
 
 ## Features
@@ -250,7 +250,7 @@ The complete product and technical rationale is in [docs/design.md](docs/design.
 
 ## Status and contributing
 
-Version 0.2.0 is the current stable release. Contributions should preserve browser/desktop parity,
+Version 0.2.1 is the current stable release. Contributions should preserve browser/desktop parity,
 lossless script bodies, conservative diagnostics, bounded resource use, and generated language-data
 consistency. See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the
 [release checklist](docs/release-checklist.md).

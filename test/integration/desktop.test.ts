@@ -63,6 +63,46 @@ suite("Logrotate desktop extension", () => {
     assert.deepEqual(openedUnknownDirective.range, new vscode.Range(1, 4, 1, 10));
   });
 
+  test("keeps an explicitly included file available inside a Git-ignored directory", async () => {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(folder, "the integration workspace was not opened");
+    const testRoot = vscode.Uri.joinPath(folder.uri, "ignore-policy-test");
+    const ignoredDirectory = vscode.Uri.joinPath(testRoot, "ignored-artifacts");
+    const includedUri = vscode.Uri.joinPath(ignoredDirectory, "emacs.conf");
+    const rootUri = vscode.Uri.joinPath(testRoot, "ignored-include.logrotate");
+    await vscode.workspace.fs.createDirectory(ignoredDirectory);
+    await vscode.workspace.fs.writeFile(
+      vscode.Uri.joinPath(testRoot, ".gitignore"),
+      new TextEncoder().encode("ignored-artifacts/\n"),
+    );
+    await vscode.workspace.fs.writeFile(
+      includedUri,
+      new TextEncoder().encode("/var/log/emacs.log {\n    rotote 2\n}\n"),
+    );
+    await vscode.workspace.fs.writeFile(
+      rootUri,
+      new TextEncoder().encode("include ignored-artifacts/emacs.conf\n"),
+    );
+
+    try {
+      const rootDocument = await vscode.workspace.openTextDocument(rootUri);
+      await vscode.window.showTextDocument(rootDocument);
+      const diagnostics = await waitForDiagnostics(includedUri);
+      const unknownDirective = diagnostics.find(({ code }) => code === "LR1001");
+      assert.ok(
+        unknownDirective,
+        `expected the ignored explicit include to be analyzed, received ${JSON.stringify(diagnostics)}`,
+      );
+      assert.deepEqual(unknownDirective.range, new vscode.Range(1, 4, 1, 10));
+
+      const includedDocument = await vscode.workspace.openTextDocument(includedUri);
+      await vscode.window.showTextDocument(includedDocument);
+      assert.equal((await waitForLanguage(includedUri, "logrotate")).languageId, "logrotate");
+    } finally {
+      await vscode.workspace.fs.delete(testRoot, { recursive: true, useTrash: false });
+    }
+  });
+
   test("recognizes an extensionless configuration from its content", async () => {
     const folder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(folder, "the integration workspace was not opened");

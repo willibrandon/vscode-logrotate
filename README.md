@@ -60,6 +60,10 @@ filename using VS Code's built-in setting:
 }
 ```
 
+Git ignore rules and `files.exclude` do not override an explicit Logrotate `include`. Included
+resources are analyzed because Logrotate itself will read them, while unrelated ignored files are
+never discovered by an ambient workspace scan.
+
 Markdown fences named `logrotate`, `logrotate.conf`, and `logrotate-config` are highlighted:
 
 ````markdown

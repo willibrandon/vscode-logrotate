@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-28
+
+### Changed
+
+- Documentation now makes the explicit `include` contract clear: included files remain available to
+  Logrotate language features even when Git or VS Code Explorer settings hide their directories.
+- Desktop coverage verifies explicit includes from Git-ignored directories without relying on
+  repository fixtures or persistent test artifacts.
+
 ## [0.2.0] - 2026-08-18
 
 ### Added
@@ -116,7 +125,8 @@ creation.
 No artifacts were published. Release validation stopped before publisher access or artifact
 creation.
 
-[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/willibrandon/vscode-logrotate/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/willibrandon/vscode-logrotate/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/willibrandon/vscode-logrotate/compare/v0.1.7...v0.1.8

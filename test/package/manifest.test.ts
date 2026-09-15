@@ -27,6 +27,14 @@ const manifest = JSON.parse(
 ) as unknown as ExtensionManifest;
 
 describe("extension manifest", () => {
+  it("installs the exact Playwright browser before browser-based checks", async () => {
+    for (const path of [".github/workflows/ci.yml", ".devcontainer/verify.sh"]) {
+      expect(await readFile(resolve(root, path), "utf8"), path).toContain(
+        "npm exec -- playwright install chromium",
+      );
+    }
+  });
+
   it("ships the reviewed square PNG icon", async () => {
     expect(manifest.icon).toBe("media/icon.png");
     const icon = await readFile(resolve(root, manifest.icon));

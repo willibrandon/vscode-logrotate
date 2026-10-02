@@ -22,7 +22,7 @@ import {
   readFileRequest,
   statRequest,
 } from "../src/protocol.js";
-import type { LoadedIncludesParams } from "../src/protocol.js";
+import type { LoadedIncludesParams, ReadDirectoryParams, ReadFileParams } from "../src/protocol.js";
 
 interface TestFile {
   readonly text?: string;
@@ -134,7 +134,7 @@ export async function createServerHarness(
       }
     }
   });
-  client.onNotification(loadedIncludesNotification, (params): void => {
+  client.onNotification(loadedIncludesNotification, (params: LoadedIncludesParams): void => {
     loadedIncludeNotifications.push(params);
     const notificationIndex = loadedIncludeNotifications.length - 1;
     for (let index = loadedIncludesWaiters.length - 1; index >= 0; index -= 1) {
@@ -145,22 +145,25 @@ export async function createServerHarness(
       }
     }
   });
-  client.onRequest(readFileRequest, ({ uri }): string => {
+  client.onRequest(readFileRequest, ({ uri }: ReadFileParams): string => {
     const text = files[uri]?.text;
     if (text === undefined) throw new Error(`Missing test file: ${uri}`);
     fileReadCounts.set(uri, (fileReadCounts.get(uri) ?? 0) + 1);
     return text;
   });
-  client.onRequest(readDirectoryRequest, async ({ uri }): Promise<readonly string[]> => {
-    const entries = files[uri]?.entries;
-    if (entries === undefined) throw new Error(`Missing test directory: ${uri}`);
-    const delay = files[uri]?.readDelayMilliseconds;
-    if (delay !== undefined) {
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, delay));
-    }
-    return entries;
-  });
-  client.onRequest(statRequest, ({ uri }) => {
+  client.onRequest(
+    readDirectoryRequest,
+    async ({ uri }: ReadDirectoryParams): Promise<readonly string[]> => {
+      const entries = files[uri]?.entries;
+      if (entries === undefined) throw new Error(`Missing test directory: ${uri}`);
+      const delay = files[uri]?.readDelayMilliseconds;
+      if (delay !== undefined) {
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, delay));
+      }
+      return entries;
+    },
+  );
+  client.onRequest(statRequest, ({ uri }: ReadFileParams) => {
     const file = files[uri];
     if (file === undefined) throw new Error(`Missing test resource: ${uri}`);
     return {

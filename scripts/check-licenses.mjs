@@ -61,18 +61,24 @@ if (createHash("sha256").update(license).digest("hex") !== mitSha256) {
 
 const notices = await readFile(resolve(root, "THIRD-PARTY-NOTICES.md"), "utf8");
 const metafiles = JSON.parse(await readFile(resolve(root, "dist/metafile.json"), "utf8"));
-const bundledNames = new Set();
+// A bundled file belongs to the innermost package directory on its path, so a nested copy
+// (node_modules/a/node_modules/b) is attributed to b at that path, not to a or to the root b.
+const bundledPaths = new Set();
 for (const metafile of metafiles) {
   for (const input of Object.keys(metafile.inputs)) {
-    const match = /node_modules\/(?:@[^/]+\/[^/]+|[^/]+)/u.exec(input);
-    if (match !== null) bundledNames.add(match[0].slice("node_modules/".length));
+    const start = input.lastIndexOf("node_modules/");
+    if (start === -1) continue;
+    const segments = input.slice(start + "node_modules/".length).split("/");
+    const name = segments[0].startsWith("@") ? `${segments[0]}/${segments[1]}` : segments[0];
+    bundledPaths.add(`${input.slice(0, start)}node_modules/${name}`);
   }
 }
 const bundledPackages = new Set(
-  [...bundledNames].map((name) => {
-    const entry = lock.packages[`node_modules/${name}`];
+  [...bundledPaths].map((path) => {
+    const name = path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length);
+    const entry = lock.packages[path];
     if (entry?.version === undefined) {
-      failures.push(`bundled dependency ${name} has no root lockfile entry`);
+      failures.push(`bundled dependency ${path} has no lockfile entry`);
       return `${name}@unknown`;
     }
     return `${name}@${entry.version}`;

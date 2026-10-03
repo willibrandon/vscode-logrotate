@@ -315,6 +315,7 @@
     "vscode-uri": "3.2.0"
   },
   "overrides": {
+    "@vscode/vsce": "$@vscode/vsce",
     "brace-expansion": "5.0.12",
     "cheerio": "1.0.0-rc.12",
     "diff": "8.0.3",

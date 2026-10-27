@@ -34,6 +34,7 @@ const expectedRuntimePackages = new Set([
   "vscode-languageclient@10.1.2",
   "vscode-languageserver-protocol@3.18.4",
   "vscode-languageserver-textdocument@1.0.15",
+  "vscode-languageserver-textdocument@1.0.16",
   "vscode-languageserver-types@3.18.4",
   "vscode-languageserver@10.1.2",
   "vscode-uri@3.2.0",

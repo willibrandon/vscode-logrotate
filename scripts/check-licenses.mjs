@@ -28,7 +28,8 @@ const approvedLicenses = new Set([
 const expectedRuntimePackages = new Set([
   "balanced-match@4.0.4",
   "brace-expansion@5.0.12",
-  "minimatch@10.2.6",
+  "@isaacs/nonrecursive-glob-match@1.0.3",
+  "minimatch@11.0.3",
   "semver@7.8.5",
   "vscode-jsonrpc@9.0.3",
   "vscode-languageclient@10.1.2",

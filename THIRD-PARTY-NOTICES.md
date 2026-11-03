@@ -5,13 +5,12 @@ The compiled extension includes the following third-party packages. Versions are
 
 ## Microsoft VS Code language packages
 
-- vscode-jsonrpc@9.0.3
-- vscode-languageclient@10.1.2
-- vscode-languageserver@10.1.2
-- vscode-languageserver-protocol@3.18.4
-- vscode-languageserver-textdocument@1.0.15
+- vscode-jsonrpc@10.0.0
+- vscode-languageclient@11.0.0
+- vscode-languageserver@11.0.0
+- vscode-languageserver-protocol@3.18.5
 - vscode-languageserver-textdocument@1.0.16
-- vscode-languageserver-types@3.18.4
+- vscode-languageserver-types@3.18.5
 - vscode-uri@3.2.0
 
 Copyright (c) Microsoft Corporation

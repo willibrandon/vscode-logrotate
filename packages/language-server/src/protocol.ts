@@ -1,4 +1,4 @@
-import { NotificationType, RequestType } from "vscode-languageserver-protocol";
+import { NotificationType, RequestType } from "vscode-languageserver";
 
 export interface ReadFileParams {
   readonly uri: string;

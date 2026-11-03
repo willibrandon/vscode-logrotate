@@ -31,13 +31,12 @@ const expectedRuntimePackages = new Set([
   "@isaacs/nonrecursive-glob-match@1.0.3",
   "minimatch@11.0.3",
   "semver@7.8.5",
-  "vscode-jsonrpc@9.0.3",
-  "vscode-languageclient@10.1.2",
-  "vscode-languageserver-protocol@3.18.4",
-  "vscode-languageserver-textdocument@1.0.15",
+  "vscode-jsonrpc@10.0.0",
+  "vscode-languageclient@11.0.0",
+  "vscode-languageserver-protocol@3.18.5",
   "vscode-languageserver-textdocument@1.0.16",
-  "vscode-languageserver-types@3.18.4",
-  "vscode-languageserver@10.1.2",
+  "vscode-languageserver-types@3.18.5",
+  "vscode-languageserver@11.0.0",
   "vscode-uri@3.2.0",
 ]);
 const mitSha256 = "f74f925ccd6fc2f4b9bdf7682f6927a64809c8668e8232997c541cc6f992787b";
